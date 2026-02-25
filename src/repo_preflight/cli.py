@@ -9,6 +9,8 @@ from . import __version__
 from .checks import (
     DEFAULT_DIFF_TARGET,
     DEFAULT_HISTORY_OBJECT_LIMIT,
+    DEFAULT_MAX_DIFF_CHANGED_LINES,
+    DEFAULT_MAX_DIFF_FILES,
     DEFAULT_MAX_HISTORY_BLOB_KIB,
     DEFAULT_MAX_TRACKED_FILE_KIB,
     CheckResult,
@@ -18,7 +20,7 @@ from .checks import (
     validate_check_ids,
 )
 from .config import PreflightConfig, load_config
-from .rulepacks import available_rule_packs, get_rule_pack
+from .rulepacks import RulePack, available_rule_packs, get_rule_pack
 
 DEFAULT_PR_BASE_REF = "origin/main"
 
@@ -96,7 +98,23 @@ def _level_for_status(status: str) -> str:
 def resolve_runtime(
     args: argparse.Namespace,
     cfg: PreflightConfig,
-) -> tuple[str, str | None, bool, bool, list[str], dict[str, str], int, int, int, str, str, str | None, str]:
+) -> tuple[
+    str,
+    str | None,
+    bool,
+    bool,
+    list[str],
+    dict[str, str],
+    int,
+    int,
+    int,
+    int,
+    int,
+    str,
+    str,
+    str | None,
+    str,
+]:
     profile = args.profile or cfg.profile or "full"
     rule_pack_name = args.rule_pack or cfg.rule_pack
 
@@ -154,6 +172,14 @@ def resolve_runtime(
     if args.history_object_limit is not None:
         history_object_limit = args.history_object_limit
 
+    max_diff_files = cfg.max_diff_files or DEFAULT_MAX_DIFF_FILES
+    if args.max_diff_files is not None:
+        max_diff_files = args.max_diff_files
+
+    max_diff_changed_lines = cfg.max_diff_changed_lines or DEFAULT_MAX_DIFF_CHANGED_LINES
+    if args.max_diff_changed_lines is not None:
+        max_diff_changed_lines = args.max_diff_changed_lines
+
     diff_mode = args.diff_mode or cfg.diff_mode or "manual"
     pr_base_ref = args.pr_base_ref or cfg.pr_base_ref or DEFAULT_PR_BASE_REF
 
@@ -173,6 +199,10 @@ def resolve_runtime(
         raise ValueError("max history blob size must be > 0 KiB")
     if history_object_limit <= 0:
         raise ValueError("history object limit must be > 0")
+    if max_diff_files <= 0:
+        raise ValueError("max diff files must be > 0")
+    if max_diff_changed_lines <= 0:
+        raise ValueError("max diff changed lines must be > 0")
 
     if not gitleaks_enabled:
         check_ids = [check_id for check_id in check_ids if check_id != "gitleaks_scan"]
@@ -199,6 +229,8 @@ def resolve_runtime(
         max_tracked_file_kib,
         max_history_blob_kib,
         history_object_limit,
+        max_diff_files,
+        max_diff_changed_lines,
         diff_mode,
         pr_base_ref,
         diff_base,
@@ -217,6 +249,8 @@ def print_human(
     max_tracked_file_kib: int,
     max_history_blob_kib: int,
     history_object_limit: int,
+    max_diff_files: int,
+    max_diff_changed_lines: int,
     diff_mode: str,
     pr_base_ref: str,
     diff_base: str | None,
@@ -238,6 +272,8 @@ def print_human(
     print(f"max_tracked_file_kib: {max_tracked_file_kib}")
     print(f"max_history_blob_kib: {max_history_blob_kib}")
     print(f"history_object_limit: {history_object_limit}")
+    print(f"max_diff_files: {max_diff_files}")
+    print(f"max_diff_changed_lines: {max_diff_changed_lines}")
     print(f"diff_base: {diff_base or 'none'}")
     print(f"diff_target: {diff_target}")
     print(f"checks: {', '.join(check_ids)}")
@@ -287,6 +323,8 @@ def build_payload(
     max_tracked_file_kib: int,
     max_history_blob_kib: int,
     history_object_limit: int,
+    max_diff_files: int,
+    max_diff_changed_lines: int,
     diff_mode: str,
     pr_base_ref: str,
     diff_base: str | None,
@@ -302,6 +340,8 @@ def build_payload(
         "max_tracked_file_kib": max_tracked_file_kib,
         "max_history_blob_kib": max_history_blob_kib,
         "history_object_limit": history_object_limit,
+        "max_diff_files": max_diff_files,
+        "max_diff_changed_lines": max_diff_changed_lines,
         "diff_mode": diff_mode,
         "pr_base_ref": pr_base_ref,
         "diff_base": diff_base,
@@ -410,6 +450,8 @@ def build_policy_doc(
     max_tracked_file_kib: int,
     max_history_blob_kib: int,
     history_object_limit: int,
+    max_diff_files: int,
+    max_diff_changed_lines: int,
     check_ids: list[str],
     severity_overrides: dict[str, str],
     config_path: str | None,
@@ -428,6 +470,8 @@ def build_policy_doc(
         f"- Max tracked file size: `{max_tracked_file_kib} KiB`",
         f"- Max history blob size: `{max_history_blob_kib} KiB`",
         f"- History object limit: `{history_object_limit}`",
+        f"- Max diff files: `{max_diff_files}`",
+        f"- Max diff changed lines: `{max_diff_changed_lines}`",
         f"- Config path: `{config_path or 'none'}`",
         "",
         "## Active checks",
@@ -442,6 +486,45 @@ def build_policy_doc(
     else:
         for check_id, status in sorted(severity_overrides.items()):
             lines.append(f"- `{check_id}` -> `{status}`")
+
+    return "\n".join(lines) + "\n"
+
+
+def build_policy_template(*, rule_pack_name: str, profile: str, strict: bool | None = None) -> str:
+    pack: RulePack = get_rule_pack(rule_pack_name)
+    effective_strict = strict if strict is not None else (pack.strict if pack.strict is not None else profile_defaults(profile)["strict"])
+
+    lines = [
+        "# .repo-preflight.toml template",
+        "",
+        f"# Rule-pack-oriented template for: {rule_pack_name}",
+        "",
+        "[preflight]",
+        f"profile = \"{profile}\"",
+        f"rule_pack = \"{rule_pack_name}\"",
+        f"strict = {'true' if effective_strict else 'false'}",
+        "no_gitleaks = false",
+        "diff_mode = \"pr\"",
+        "pr_base_ref = \"origin/main\"",
+        "diff_target = \"HEAD\"",
+        "max_tracked_file_kib = 5120",
+        "max_history_blob_kib = 5120",
+        "history_object_limit = 20000",
+        "max_diff_files = 200",
+        "max_diff_changed_lines = 4000",
+        "",
+        "[checks]",
+        "include = []",
+        "exclude = []",
+        "",
+        "[severity_overrides]",
+    ]
+
+    if pack.severity_overrides:
+        for check_id, status in sorted(pack.severity_overrides.items()):
+            lines.append(f"{check_id} = \"{status}\"")
+    else:
+        lines.append("# (none)")
 
     return "\n".join(lines) + "\n"
 
@@ -469,6 +552,8 @@ def cmd_check(args: argparse.Namespace) -> int:
             max_tracked_file_kib,
             max_history_blob_kib,
             history_object_limit,
+            max_diff_files,
+            max_diff_changed_lines,
             diff_mode,
             pr_base_ref,
             diff_base,
@@ -483,6 +568,8 @@ def cmd_check(args: argparse.Namespace) -> int:
             history_object_limit=history_object_limit,
             diff_base=diff_base,
             diff_target=diff_target,
+            max_diff_files=max_diff_files,
+            max_diff_changed_lines=max_diff_changed_lines,
         )
     except ValueError as err:
         print(f"Error: {err}")
@@ -500,6 +587,8 @@ def cmd_check(args: argparse.Namespace) -> int:
         max_tracked_file_kib=max_tracked_file_kib,
         max_history_blob_kib=max_history_blob_kib,
         history_object_limit=history_object_limit,
+        max_diff_files=max_diff_files,
+        max_diff_changed_lines=max_diff_changed_lines,
         diff_mode=diff_mode,
         pr_base_ref=pr_base_ref,
         diff_base=diff_base,
@@ -546,6 +635,8 @@ def cmd_check(args: argparse.Namespace) -> int:
             max_tracked_file_kib=max_tracked_file_kib,
             max_history_blob_kib=max_history_blob_kib,
             history_object_limit=history_object_limit,
+            max_diff_files=max_diff_files,
+            max_diff_changed_lines=max_diff_changed_lines,
             diff_mode=diff_mode,
             pr_base_ref=pr_base_ref,
             diff_base=diff_base,
@@ -574,6 +665,8 @@ def cmd_policy_doc(args: argparse.Namespace) -> int:
             max_tracked_file_kib,
             max_history_blob_kib,
             history_object_limit,
+            max_diff_files,
+            max_diff_changed_lines,
             diff_mode,
             pr_base_ref,
             diff_base,
@@ -597,6 +690,8 @@ def cmd_policy_doc(args: argparse.Namespace) -> int:
         max_tracked_file_kib=max_tracked_file_kib,
         max_history_blob_kib=max_history_blob_kib,
         history_object_limit=history_object_limit,
+        max_diff_files=max_diff_files,
+        max_diff_changed_lines=max_diff_changed_lines,
         check_ids=check_ids,
         severity_overrides=severity_overrides,
         config_path=config_path_str,
@@ -609,6 +704,20 @@ def cmd_policy_doc(args: argparse.Namespace) -> int:
         print(f"Wrote policy doc: {output_path}")
     else:
         print(doc, end="")
+
+    return 0
+
+
+def cmd_policy_template(args: argparse.Namespace) -> int:
+    template = build_policy_template(rule_pack_name=args.rule_pack, profile=args.profile, strict=args.strict)
+
+    if args.output:
+        output_path = Path(args.output).expanduser().resolve()
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(template, encoding="utf-8")
+        print(f"Wrote policy template: {output_path}")
+    else:
+        print(template, end="")
 
     return 0
 
@@ -663,6 +772,16 @@ def _add_common_policy_args(parser: argparse.ArgumentParser) -> None:
         help=f"Maximum git objects scanned in history mode (default: {DEFAULT_HISTORY_OBJECT_LIMIT})",
     )
     parser.add_argument(
+        "--max-diff-files",
+        type=int,
+        help=f"Warn threshold for number of changed files in diff mode (default: {DEFAULT_MAX_DIFF_FILES})",
+    )
+    parser.add_argument(
+        "--max-diff-changed-lines",
+        type=int,
+        help=f"Warn threshold for total changed lines in diff mode (default: {DEFAULT_MAX_DIFF_CHANGED_LINES})",
+    )
+    parser.add_argument(
         "--diff-mode",
         choices=["manual", "pr"],
         help="Diff resolution mode: manual refs or PR/CI-aware base selection",
@@ -703,6 +822,19 @@ def build_parser() -> argparse.ArgumentParser:
     policy_doc.add_argument("--output", help="Write markdown output to a file")
     _add_common_policy_args(policy_doc)
     policy_doc.set_defaults(func=cmd_policy_doc)
+
+    policy_template = sub.add_parser("policy-template", help="Render rule-pack policy template as .toml")
+    policy_template.add_argument("--rule-pack", choices=available_rule_packs(), required=True, help="Rule pack name")
+    policy_template.add_argument("--profile", choices=["quick", "full", "ci"], default="ci", help="Baseline profile")
+    policy_template.add_argument(
+        "--strict",
+        dest="strict",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Override strict mode in template",
+    )
+    policy_template.add_argument("--output", help="Write template output to a file")
+    policy_template.set_defaults(func=cmd_policy_template)
 
     list_checks = sub.add_parser("list-checks", help="List available check ids")
     list_checks.set_defaults(func=cmd_list_checks)

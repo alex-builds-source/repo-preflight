@@ -11,6 +11,8 @@ DEFAULT_MAX_TRACKED_FILE_KIB = 5120  # 5 MiB
 DEFAULT_MAX_HISTORY_BLOB_KIB = 5120  # 5 MiB
 DEFAULT_HISTORY_OBJECT_LIMIT = 20000
 DEFAULT_DIFF_TARGET = "HEAD"
+DEFAULT_MAX_DIFF_FILES = 200
+DEFAULT_MAX_DIFF_CHANGED_LINES = 4000
 
 
 @dataclass
@@ -51,6 +53,34 @@ def _diff_changed_files(path: Path, *, diff_base: str | None, diff_target: str) 
 
     changed = [line.strip() for line in proc.stdout.splitlines() if line.strip()]
     return changed, None
+
+
+def _diff_numstat(path: Path, *, diff_base: str | None, diff_target: str) -> tuple[list[tuple[str, int, int]] | None, str | None]:
+    if not diff_base:
+        return None, None
+
+    range_spec = f"{diff_base}...{diff_target}"
+    proc = _run(["git", "diff", "--numstat", "--diff-filter=ACMRT", range_spec], path)
+    if proc.returncode != 0:
+        return None, proc.stderr.strip() or proc.stdout.strip() or "unknown git diff numstat error"
+
+    out: list[tuple[str, int, int]] = []
+    for line in proc.stdout.splitlines():
+        parts = line.split("\t")
+        if len(parts) < 3:
+            continue
+        a_raw, d_raw, file_path = parts[0].strip(), parts[1].strip(), parts[2].strip()
+        try:
+            added = int(a_raw)
+        except ValueError:
+            added = 0
+        try:
+            deleted = int(d_raw)
+        except ValueError:
+            deleted = 0
+        out.append((file_path, added, deleted))
+
+    return out, None
 
 
 def check_git_repository(path: Path) -> CheckResult:
@@ -531,6 +561,73 @@ def check_diff_large_files(
     )
 
 
+def check_diff_patch_size(
+    path: Path,
+    *,
+    diff_base: str | None = None,
+    diff_target: str = DEFAULT_DIFF_TARGET,
+    max_diff_files: int = DEFAULT_MAX_DIFF_FILES,
+    max_changed_lines: int = DEFAULT_MAX_DIFF_CHANGED_LINES,
+) -> CheckResult:
+    if not _is_git_repo(path):
+        return CheckResult(
+            "diff_patch_size",
+            "warn",
+            "Not a git repository; skipped diff patch-size check",
+            "Initialize git and re-run checks.",
+        )
+
+    if not diff_base:
+        return CheckResult(
+            "diff_patch_size",
+            "pass",
+            "No diff base configured; diff-aware checks skipped",
+        )
+
+    stats, err = _diff_numstat(path, diff_base=diff_base, diff_target=diff_target)
+    if err is not None:
+        return CheckResult(
+            "diff_patch_size",
+            "warn",
+            f"Could not compute numstat for {diff_base}...{diff_target}: {err}",
+            "Verify refs exist locally (e.g., fetch origin) and re-run.",
+        )
+
+    if not stats:
+        return CheckResult(
+            "diff_patch_size",
+            "pass",
+            f"No changed files between {diff_base}...{diff_target}",
+        )
+
+    file_count = len(stats)
+    total_changed_lines = sum(a + d for _, a, d in stats)
+
+    warn_reasons: list[str] = []
+    if file_count > max_diff_files:
+        warn_reasons.append(f"files={file_count} > {max_diff_files}")
+    if total_changed_lines > max_changed_lines:
+        warn_reasons.append(f"changed_lines={total_changed_lines} > {max_changed_lines}")
+
+    sorted_stats = sorted(stats, key=lambda x: x[1] + x[2], reverse=True)
+    preview = ", ".join(f"{name} (+{a}/-{d})" for name, a, d in sorted_stats[:5])
+    more = "" if len(sorted_stats) <= 5 else f" (+{len(sorted_stats) - 5} more)"
+
+    if not warn_reasons:
+        return CheckResult(
+            "diff_patch_size",
+            "pass",
+            f"Diff size within thresholds ({file_count} files, {total_changed_lines} changed lines) for {diff_base}...{diff_target}",
+        )
+
+    return CheckResult(
+        "diff_patch_size",
+        "warn",
+        f"Diff exceeds thresholds for {diff_base}...{diff_target}: {'; '.join(warn_reasons)}. Top changes: {preview}{more}",
+        "Split large changes into smaller PRs/commits when possible.",
+    )
+
+
 def check_gitleaks(path: Path) -> CheckResult:
     if not _is_git_repo(path):
         return CheckResult(
@@ -584,6 +681,7 @@ CHECK_REGISTRY = {
     "history_large_blobs": check_history_large_blobs,
     "diff_changed_files": check_diff_changed_files,
     "diff_large_files": check_diff_large_files,
+    "diff_patch_size": check_diff_patch_size,
     "gitleaks_scan": check_gitleaks,
 }
 
@@ -639,6 +737,8 @@ def run_checks(
     history_object_limit: int = DEFAULT_HISTORY_OBJECT_LIMIT,
     diff_base: str | None = None,
     diff_target: str = DEFAULT_DIFF_TARGET,
+    max_diff_files: int = DEFAULT_MAX_DIFF_FILES,
+    max_diff_changed_lines: int = DEFAULT_MAX_DIFF_CHANGED_LINES,
 ) -> list[CheckResult]:
     unknown = validate_check_ids(check_ids)
     if unknown:
@@ -664,6 +764,14 @@ def run_checks(
                 diff_base=diff_base,
                 diff_target=diff_target,
                 max_file_kib=max_tracked_file_kib,
+            )
+        elif check_id == "diff_patch_size":
+            result = check_diff_patch_size(
+                path,
+                diff_base=diff_base,
+                diff_target=diff_target,
+                max_diff_files=max_diff_files,
+                max_changed_lines=max_diff_changed_lines,
             )
         else:
             result = CHECK_REGISTRY[check_id](path)

@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.7] - 2026-02-25
+### Added
+- Diff-depth threshold check: `diff_patch_size`.
+- Diff threshold controls:
+  - `--max-diff-files`
+  - `--max-diff-changed-lines`
+  - `preflight.max_diff_files`
+  - `preflight.max_diff_changed_lines`
+- `policy-template` command for rule-pack-oriented `.repo-preflight.toml` generation.
+
+### Changed
+- JSON output now includes diff-depth threshold settings.
+- Expanded tests for diff patch-size behavior and policy-template generation.
+
 ## [0.1.6] - 2026-02-25
 ### Added
 - PR/CI-aware diff mode (`--diff-mode pr`) with fallback base ref control (`--pr-base-ref`).

@@ -24,6 +24,10 @@ diff_target = "HEAD"
 max_tracked_file_kib = 5120
 max_history_blob_kib = 5120
 
+# Diff-depth thresholds
+max_diff_files = 200
+max_diff_changed_lines = 4000
+
 # Maximum history objects scanned by history_large_blobs
 history_object_limit = 20000
 

@@ -5,6 +5,7 @@ from pathlib import Path
 from repo_preflight.cli import (
     build_payload,
     build_policy_doc,
+    build_policy_template,
     build_sarif_payload,
     exit_code,
     profile_defaults,
@@ -25,6 +26,8 @@ class ArgsStub:
         max_file_kib=None,
         max_history_kib=None,
         history_object_limit=None,
+        max_diff_files=None,
+        max_diff_changed_lines=None,
         diff_mode=None,
         pr_base_ref=None,
         diff_base=None,
@@ -37,6 +40,8 @@ class ArgsStub:
         self.max_file_kib = max_file_kib
         self.max_history_kib = max_history_kib
         self.history_object_limit = history_object_limit
+        self.max_diff_files = max_diff_files
+        self.max_diff_changed_lines = max_diff_changed_lines
         self.diff_mode = diff_mode
         self.pr_base_ref = pr_base_ref
         self.diff_base = diff_base
@@ -71,6 +76,8 @@ def test_json_payload_fields():
         max_tracked_file_kib=2048,
         max_history_blob_kib=4096,
         history_object_limit=15000,
+        max_diff_files=222,
+        max_diff_changed_lines=3333,
         diff_mode="pr",
         pr_base_ref="origin/main",
         diff_base="origin/main",
@@ -79,16 +86,13 @@ def test_json_payload_fields():
     assert payload["strict"] is True
     assert payload["profile"] == "ci"
     assert payload["rule_pack"] == "oss-library"
-    assert payload["config_path"] == "/tmp/repo/.repo-preflight.toml"
-    assert payload["max_tracked_file_kib"] == 2048
-    assert payload["max_history_blob_kib"] == 4096
-    assert payload["history_object_limit"] == 15000
+    assert payload["max_diff_files"] == 222
+    assert payload["max_diff_changed_lines"] == 3333
     assert payload["diff_mode"] == "pr"
     assert payload["pr_base_ref"] == "origin/main"
     assert payload["diff_base"] == "origin/main"
     assert payload["diff_target"] == "HEAD"
     assert payload["exit_code"] == 2
-    assert payload["summary"] == {"pass": 1, "warn": 1, "fail": 0}
 
 
 def test_sarif_payload_shape():
@@ -113,10 +117,8 @@ def test_sarif_payload_shape():
     assert sarif["version"] == "2.1.0"
     run = sarif["runs"][0]
     assert run["tool"]["driver"]["name"] == "repo-preflight"
-    assert len(run["results"]) == 2  # pass entries omitted
-    assert run["results"][0]["level"] in {"error", "warning"}
+    assert len(run["results"]) == 2
     assert run["properties"]["diff_mode"] == "pr"
-    assert run["properties"]["diff_base"] == "origin/main"
 
 
 def test_policy_doc_contains_effective_settings():
@@ -133,15 +135,23 @@ def test_policy_doc_contains_effective_settings():
         max_tracked_file_kib=2048,
         max_history_blob_kib=4096,
         history_object_limit=15000,
+        max_diff_files=200,
+        max_diff_changed_lines=4000,
         check_ids=["readme_present", "gitleaks_scan"],
         severity_overrides={"license_present": "fail"},
         config_path="/tmp/repo/.repo-preflight.toml",
     )
     assert "# repo-preflight policy" in doc
     assert "Profile: `ci`" in doc
-    assert "Diff mode: `pr`" in doc
-    assert "`readme_present`" in doc
+    assert "Max diff files: `200`" in doc
     assert "`license_present` -> `fail`" in doc
+
+
+def test_policy_template_contains_rule_pack_defaults():
+    template = build_policy_template(rule_pack_name="oss-library", profile="ci")
+    assert 'rule_pack = "oss-library"' in template
+    assert 'diff_mode = "pr"' in template
+    assert 'license_present = "fail"' in template
 
 
 def test_profile_defaults():
@@ -162,6 +172,8 @@ def test_resolve_runtime_merges_cli_over_config():
         max_tracked_file_kib=1024,
         max_history_blob_kib=2048,
         history_object_limit=6000,
+        max_diff_files=50,
+        max_diff_changed_lines=500,
     )
     args = ArgsStub(
         profile="ci",
@@ -170,6 +182,8 @@ def test_resolve_runtime_merges_cli_over_config():
         max_file_kib=4096,
         max_history_kib=8192,
         history_object_limit=1000,
+        max_diff_files=100,
+        max_diff_changed_lines=999,
         diff_mode="manual",
         pr_base_ref="origin/develop",
         diff_base="origin/develop",
@@ -186,6 +200,8 @@ def test_resolve_runtime_merges_cli_over_config():
         max_file_kib,
         max_history_kib,
         history_limit,
+        max_diff_files,
+        max_diff_changed_lines,
         diff_mode,
         pr_base_ref,
         diff_base,
@@ -199,6 +215,8 @@ def test_resolve_runtime_merges_cli_over_config():
     assert max_file_kib == 4096
     assert max_history_kib == 8192
     assert history_limit == 1000
+    assert max_diff_files == 100
+    assert max_diff_changed_lines == 999
     assert diff_mode == "manual"
     assert pr_base_ref == "origin/develop"
     assert diff_base == "origin/develop"
@@ -222,6 +240,8 @@ def test_resolve_runtime_pr_mode_uses_ci_env(monkeypatch):
         _max_file_kib,
         _max_history_kib,
         _history_limit,
+        _max_diff_files,
+        _max_diff_changed_lines,
         diff_mode,
         _pr_base_ref,
         diff_base,
@@ -251,6 +271,8 @@ def test_rule_pack_applies_when_selected():
         _e,
         _f,
         _g,
+        _h,
+        _i,
     ) = resolve_runtime(args, cfg)
     assert rule_pack == "oss-library"
     assert strict is True

@@ -18,6 +18,8 @@ def test_load_config_defaults_when_missing(tmp_path: Path):
     assert cfg.max_tracked_file_kib is None
     assert cfg.max_history_blob_kib is None
     assert cfg.history_object_limit is None
+    assert cfg.max_diff_files is None
+    assert cfg.max_diff_changed_lines is None
     assert cfg.include == []
     assert cfg.exclude == []
     assert cfg.severity_overrides == {}
@@ -39,6 +41,8 @@ diff_target = "HEAD"
 max_tracked_file_kib = 2048
 max_history_blob_kib = 4096
 history_object_limit = 15000
+max_diff_files = 300
+max_diff_changed_lines = 6000
 
 [checks]
 include = ["license_present"]
@@ -63,6 +67,8 @@ license_present = "fail"
     assert cfg.max_tracked_file_kib == 2048
     assert cfg.max_history_blob_kib == 4096
     assert cfg.history_object_limit == 15000
+    assert cfg.max_diff_files == 300
+    assert cfg.max_diff_changed_lines == 6000
     assert cfg.include == ["license_present"]
     assert cfg.exclude == ["clean_worktree"]
     assert cfg.severity_overrides == {"license_present": "fail"}

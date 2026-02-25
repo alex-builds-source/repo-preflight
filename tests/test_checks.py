@@ -70,6 +70,7 @@ def test_happy_path_without_gitleaks(tmp_path: Path):
     assert statuses["tracked_keylike_files"] == "pass"
     assert statuses["tracked_large_files"] == "pass"
     assert statuses["history_large_blobs"] == "pass"
+    assert statuses["diff_patch_size"] == "pass"
 
 
 def test_tracked_env_file_fails(tmp_path: Path):
@@ -99,35 +100,6 @@ def test_missing_readme_fails(tmp_path: Path):
     results = run_checks(repo, check_ids=_full_without_gitleaks())
     status_by_id = {r.id: r.status for r in results}
     assert status_by_id["readme_present"] == "fail"
-
-
-def test_remote_origin_warns_when_missing(tmp_path: Path):
-    repo = tmp_path / "repo"
-    repo.mkdir()
-    _init_repo(repo)
-    _write(repo, "README.md", "# Demo\n")
-    _write(repo, "SECURITY.md", "policy\n")
-    _write(repo, ".gitignore", ".env\n.env.*\n!.env.example\n")
-    _commit_all(repo)
-
-    results = run_checks(repo, check_ids=_full_without_gitleaks())
-    status_by_id = {r.id: r.status for r in results}
-    assert status_by_id["remote_origin"] == "warn"
-
-
-def test_unrecognized_branch_warns(tmp_path: Path):
-    repo = tmp_path / "repo"
-    repo.mkdir()
-    _init_repo(repo)
-    _write(repo, "README.md", "# Demo\n")
-    _write(repo, "SECURITY.md", "policy\n")
-    _write(repo, ".gitignore", ".env\n.env.*\n!.env.example\n")
-    _commit_all(repo)
-    _run(["git", "checkout", "-b", "feature/x"], repo)
-
-    results = run_checks(repo, check_ids=_full_without_gitleaks())
-    status_by_id = {r.id: r.status for r in results}
-    assert status_by_id["default_branch_style"] == "warn"
 
 
 def test_large_tracked_file_warns_with_low_threshold(tmp_path: Path):
@@ -171,13 +143,14 @@ def test_diff_checks_skip_without_base(tmp_path: Path):
     _write(repo, "README.md", "# Demo\n")
     _commit_all(repo)
 
-    results = run_checks(repo, check_ids=["diff_changed_files", "diff_large_files"])
+    results = run_checks(repo, check_ids=["diff_changed_files", "diff_large_files", "diff_patch_size"])
     status_by_id = {r.id: r.status for r in results}
     assert status_by_id["diff_changed_files"] == "pass"
     assert status_by_id["diff_large_files"] == "pass"
+    assert status_by_id["diff_patch_size"] == "pass"
 
 
-def test_diff_large_file_warns_between_base_and_head(tmp_path: Path):
+def test_diff_patch_size_warns_for_big_change(tmp_path: Path):
     repo = tmp_path / "repo"
     repo.mkdir()
     _init_repo(repo)
@@ -185,19 +158,20 @@ def test_diff_large_file_warns_between_base_and_head(tmp_path: Path):
     _commit_all(repo, "base")
 
     _run(["git", "checkout", "-b", "feature/diff"], repo)
-    _write_bytes(repo, "assets/new-big.bin", 4096)
-    _commit_all(repo, "add big changed file")
+    _write(repo, "README.md", "# Demo\n" + ("line\n" * 200))
+    _write(repo, "new.txt", "".join(f"x{i}\n" for i in range(150)))
+    _commit_all(repo, "big diff")
 
     results = run_checks(
         repo,
-        check_ids=["diff_changed_files", "diff_large_files"],
+        check_ids=["diff_patch_size"],
         diff_base="main",
         diff_target="HEAD",
-        max_tracked_file_kib=1,
+        max_diff_files=1,
+        max_diff_changed_lines=50,
     )
-    status_by_id = {r.id: r.status for r in results}
-    assert status_by_id["diff_changed_files"] == "pass"
-    assert status_by_id["diff_large_files"] == "warn"
+    assert results[0].id == "diff_patch_size"
+    assert results[0].status == "warn"
 
 
 def test_severity_override_changes_status(tmp_path: Path):

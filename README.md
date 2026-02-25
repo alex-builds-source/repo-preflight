@@ -28,12 +28,14 @@ repo-preflight check --no-gitleaks
 repo-preflight check --max-file-kib 2048
 repo-preflight check --max-history-kib 2048
 repo-preflight check --history-object-limit 5000
+repo-preflight check --max-diff-files 200 --max-diff-changed-lines 4000
 repo-preflight check --diff-mode pr --pr-base-ref origin/main
 repo-preflight check --diff-base origin/main --diff-target HEAD
 repo-preflight check --json
 repo-preflight check --compact
 repo-preflight check --sarif
 repo-preflight policy-doc --path . --output POLICY.md
+repo-preflight policy-template --rule-pack oss-library --output .repo-preflight.toml
 repo-preflight list-checks
 repo-preflight list-rule-packs
 ```
@@ -56,10 +58,11 @@ Rule packs set policy defaults and can still be overridden by config/CLI.
 
 ## Diff-aware checks
 
-When a diff base is available (`--diff-base` or `--diff-mode pr`), preflight additionally evaluates changed files in the range:
+When a diff base is available (`--diff-base` or `--diff-mode pr`), preflight evaluates changed files in the range:
 
 - `diff_changed_files`
 - `diff_large_files`
+- `diff_patch_size`
 
 `--diff-mode pr` is CI-friendly and auto-resolves refs from PR/MR env vars with fallback base ref.
 
@@ -80,6 +83,8 @@ pr_base_ref = "origin/main"
 diff_target = "HEAD"
 max_tracked_file_kib = 2048
 max_history_blob_kib = 2048
+max_diff_files = 200
+max_diff_changed_lines = 4000
 history_object_limit = 10000
 
 [checks]
@@ -89,7 +94,7 @@ exclude = ["clean_worktree"]
 license_present = "fail"
 ```
 
-## Checks (v0.1.6)
+## Checks (v0.1.7)
 
 - `git_repository` (fail)
 - `remote_origin` (warn)
@@ -106,6 +111,7 @@ license_present = "fail"
 - `history_large_blobs` (warn)
 - `diff_changed_files` (pass/warn)
 - `diff_large_files` (pass/warn)
+- `diff_patch_size` (pass/warn)
 - `gitleaks_scan` (pass/warn/fail)
 
 Exit codes:
