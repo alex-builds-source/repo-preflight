@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "repo-preflight"
+version = "0.1.0"
+description = "Check whether a repository is safe and ready to publish"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "Alex Builds Source" }]
+license = { text = "MIT" }
+keywords = ["security", "git", "cli", "preflight"]
+
+[project.scripts]
+repo-preflight = "repo_preflight.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
