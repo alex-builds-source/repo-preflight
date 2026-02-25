@@ -4,7 +4,8 @@ Check whether a repository is safe and ready to publish.
 
 Designed for both humans and agents:
 - Human-friendly summary output
-- Machine-friendly `--json` output
+- Compact output for CI logs
+- Machine-friendly JSON and SARIF output
 
 ## Install
 
@@ -24,7 +25,11 @@ repo-preflight check --strict
 repo-preflight check --gitleaks
 repo-preflight check --no-gitleaks
 repo-preflight check --max-file-kib 2048
+repo-preflight check --max-history-kib 2048
+repo-preflight check --history-object-limit 5000
 repo-preflight check --json
+repo-preflight check --compact
+repo-preflight check --sarif
 repo-preflight list-checks
 repo-preflight list-rule-packs
 ```
@@ -43,7 +48,7 @@ CLI flags can override profile defaults.
 - `internal-service`: internal service defaults with strict repo hygiene
 - `cli-tool`: balanced CLI project defaults
 
-Rule packs set policy defaults (severity/strictness) and can still be overridden.
+Rule packs set policy defaults and can still be overridden by config/CLI.
 
 ## Config file (`.repo-preflight.toml`)
 
@@ -58,6 +63,8 @@ profile = "ci"
 rule_pack = "oss-library"
 strict = true
 max_tracked_file_kib = 2048
+max_history_blob_kib = 2048
+history_object_limit = 10000
 
 [checks]
 exclude = ["clean_worktree"]
@@ -66,7 +73,7 @@ exclude = ["clean_worktree"]
 license_present = "fail"
 ```
 
-## Checks (v0.1.3)
+## Checks (v0.1.4)
 
 - `git_repository` (fail)
 - `remote_origin` (warn)
@@ -80,6 +87,7 @@ license_present = "fail"
 - `tracked_env_files` (fail)
 - `tracked_keylike_files` (fail)
 - `tracked_large_files` (warn)
+- `history_large_blobs` (warn)
 - `gitleaks_scan` (pass/warn/fail)
 
 Exit codes:

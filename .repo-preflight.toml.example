@@ -10,8 +10,12 @@ profile = "full"
 strict = false
 no_gitleaks = false
 
-# Warn threshold for tracked file size checks
+# Warn thresholds
 max_tracked_file_kib = 5120
+max_history_blob_kib = 5120
+
+# Maximum history objects scanned by history_large_blobs
+history_object_limit = 20000
 
 [checks]
 # Optional explicit adjustments to profile check list

@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.4] - 2026-02-25
+### Added
+- History-aware large-blob check: `history_large_blobs`.
+- Config support for history scan controls:
+  - `preflight.max_history_blob_kib`
+  - `preflight.history_object_limit`
+- New output modes:
+  - `--compact` for concise CI logs
+  - `--sarif` for SARIF 2.1.0 output
+
+### Changed
+- JSON output now includes history scan settings.
+- Expanded tests for history-blob detection and SARIF payload generation.
+
 ## [0.1.3] - 2026-02-25
 ### Added
 - Rule packs: `oss-library`, `internal-service`, `cli-tool`.

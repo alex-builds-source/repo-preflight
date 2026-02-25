@@ -19,6 +19,8 @@ class PreflightConfig:
     strict: bool | None = None
     no_gitleaks: bool | None = None
     max_tracked_file_kib: int | None = None
+    max_history_blob_kib: int | None = None
+    history_object_limit: int | None = None
     include: list[str] = field(default_factory=list)
     exclude: list[str] = field(default_factory=list)
     severity_overrides: dict[str, str] = field(default_factory=dict)
@@ -82,6 +84,16 @@ def load_config(path: Path) -> PreflightConfig:
         if "max_tracked_file_kib" in preflight:
             cfg.max_tracked_file_kib = _as_positive_int(
                 preflight["max_tracked_file_kib"], key="preflight.max_tracked_file_kib"
+            )
+
+        if "max_history_blob_kib" in preflight:
+            cfg.max_history_blob_kib = _as_positive_int(
+                preflight["max_history_blob_kib"], key="preflight.max_history_blob_kib"
+            )
+
+        if "history_object_limit" in preflight:
+            cfg.history_object_limit = _as_positive_int(
+                preflight["history_object_limit"], key="preflight.history_object_limit"
             )
 
     checks = data.get("checks", {})

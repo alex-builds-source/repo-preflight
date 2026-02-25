@@ -8,6 +8,8 @@ from pathlib import Path
 
 VALID_STATUSES = {"pass", "warn", "fail"}
 DEFAULT_MAX_TRACKED_FILE_KIB = 5120  # 5 MiB
+DEFAULT_MAX_HISTORY_BLOB_KIB = 5120  # 5 MiB
+DEFAULT_HISTORY_OBJECT_LIMIT = 20000
 
 
 @dataclass
@@ -307,6 +309,104 @@ def check_tracked_large_files(path: Path, *, max_file_kib: int = DEFAULT_MAX_TRA
     )
 
 
+def check_history_large_blobs(
+    path: Path,
+    *,
+    max_blob_kib: int = DEFAULT_MAX_HISTORY_BLOB_KIB,
+    object_limit: int = DEFAULT_HISTORY_OBJECT_LIMIT,
+) -> CheckResult:
+    if not _is_git_repo(path):
+        return CheckResult(
+            "history_large_blobs",
+            "warn",
+            "Not a git repository; skipped history large-blob check",
+            "Initialize git and re-run checks.",
+        )
+
+    rev = _run(["git", "rev-list", "--objects", "--all"], path)
+    if rev.returncode != 0:
+        return CheckResult(
+            "history_large_blobs",
+            "warn",
+            "Could not enumerate git history objects",
+            "Run 'git rev-list --objects --all' manually to inspect history state.",
+        )
+
+    object_ids: list[str] = []
+    first_path: dict[str, str] = {}
+    for line in rev.stdout.splitlines():
+        if not line.strip():
+            continue
+        parts = line.split(" ", 1)
+        oid = parts[0].strip()
+        if not oid:
+            continue
+        if oid not in first_path:
+            object_ids.append(oid)
+            if len(parts) == 2 and parts[1].strip():
+                first_path[oid] = parts[1].strip()
+
+    truncated = False
+    if len(object_ids) > object_limit:
+        object_ids = object_ids[:object_limit]
+        truncated = True
+
+    if not object_ids:
+        return CheckResult("history_large_blobs", "pass", "No history objects found")
+
+    batch = subprocess.run(
+        ["git", "cat-file", "--batch-check=%(objectname) %(objecttype) %(objectsize)"],
+        cwd=str(path),
+        input="\n".join(object_ids) + "\n",
+        capture_output=True,
+        text=True,
+    )
+    if batch.returncode != 0:
+        return CheckResult(
+            "history_large_blobs",
+            "warn",
+            "Could not inspect object sizes for history scan",
+            "Run 'git cat-file --batch-check' manually and inspect large blobs.",
+        )
+
+    threshold = max_blob_kib * 1024
+    oversized: list[tuple[str, int]] = []
+    for line in batch.stdout.splitlines():
+        parts = line.strip().split(" ")
+        if len(parts) != 3:
+            continue
+        oid, obj_type, size_s = parts
+        if obj_type != "blob":
+            continue
+        try:
+            size = int(size_s)
+        except ValueError:
+            continue
+        if size <= threshold:
+            continue
+        label = first_path.get(oid, oid[:12])
+        oversized.append((label, size))
+
+    if not oversized:
+        suffix = " (object scan truncated)" if truncated else ""
+        return CheckResult(
+            "history_large_blobs",
+            "pass",
+            f"No history blobs above {max_blob_kib} KiB{suffix}",
+        )
+
+    oversized.sort(key=lambda x: x[1], reverse=True)
+    preview = ", ".join(f"{name} ({size // 1024} KiB)" for name, size in oversized[:5])
+    more = "" if len(oversized) <= 5 else f" (+{len(oversized) - 5} more)"
+    trunc_note = f"; scanned first {object_limit} objects" if truncated else ""
+    return CheckResult(
+        "history_large_blobs",
+        "warn",
+        f"History blobs exceed {max_blob_kib} KiB: {preview}{more}{trunc_note}",
+        "Use Git LFS, rewrite history when appropriate, and avoid committing large binary assets.",
+    )
+
+
 def check_gitleaks(path: Path) -> CheckResult:
     if not _is_git_repo(path):
         return CheckResult(
@@ -357,6 +457,7 @@ CHECK_REGISTRY = {
     "tracked_env_files": check_tracked_env,
     "tracked_keylike_files": check_tracked_keylike_files,
     "tracked_large_files": check_tracked_large_files,
+    "history_large_blobs": check_history_large_blobs,
     "gitleaks_scan": check_gitleaks,
 }
 
@@ -408,6 +509,8 @@ def run_checks(
     check_ids: list[str],
     severity_overrides: dict[str, str] | None = None,
     max_tracked_file_kib: int = DEFAULT_MAX_TRACKED_FILE_KIB,
+    max_history_blob_kib: int = DEFAULT_MAX_HISTORY_BLOB_KIB,
+    history_object_limit: int = DEFAULT_HISTORY_OBJECT_LIMIT,
 ) -> list[CheckResult]:
     unknown = validate_check_ids(check_ids)
     if unknown:
@@ -419,6 +522,12 @@ def run_checks(
     for check_id in check_ids:
         if check_id == "tracked_large_files":
             result = check_tracked_large_files(path, max_file_kib=max_tracked_file_kib)
+        elif check_id == "history_large_blobs":
+            result = check_history_large_blobs(
+                path,
+                max_blob_kib=max_history_blob_kib,
+                object_limit=history_object_limit,
+            )
         else:
             result = CHECK_REGISTRY[check_id](path)
 

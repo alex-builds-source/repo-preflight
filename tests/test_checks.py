@@ -69,6 +69,7 @@ def test_happy_path_without_gitleaks(tmp_path: Path):
     assert statuses["tracked_env_files"] == "pass"
     assert statuses["tracked_keylike_files"] == "pass"
     assert statuses["tracked_large_files"] == "pass"
+    assert statuses["history_large_blobs"] == "pass"
 
 
 def test_tracked_env_file_fails(tmp_path: Path):
@@ -140,6 +141,27 @@ def test_large_tracked_file_warns_with_low_threshold(tmp_path: Path):
     assert len(results) == 1
     assert results[0].id == "tracked_large_files"
     assert results[0].status == "warn"
+
+
+def test_history_large_blob_warns_even_if_not_tracked_anymore(tmp_path: Path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _init_repo(repo)
+    _write(repo, "README.md", "# Demo\n")
+    _write_bytes(repo, "assets/old-large.bin", 4096)
+    _commit_all(repo, "add large blob")
+    _run(["git", "rm", "assets/old-large.bin"], repo)
+    _commit_all(repo, "remove large blob")
+
+    results = run_checks(
+        repo,
+        check_ids=["tracked_large_files", "history_large_blobs"],
+        max_tracked_file_kib=1,
+        max_history_blob_kib=1,
+    )
+    status_by_id = {r.id: r.status for r in results}
+    assert status_by_id["tracked_large_files"] == "pass"
+    assert status_by_id["history_large_blobs"] == "warn"
 
 
 def test_severity_override_changes_status(tmp_path: Path):

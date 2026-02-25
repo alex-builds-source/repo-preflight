@@ -5,11 +5,13 @@
 ## Machine-readable interface
 
 ### Commands
-- `repo-preflight check --json --path <repo> [--profile <quick|full|ci>] [--rule-pack <name>] [--strict|--no-strict] [--gitleaks|--no-gitleaks] [--max-file-kib <int>] [--config <path>] [--no-config]`
+- `repo-preflight check --json --path <repo> [--profile <quick|full|ci>] [--rule-pack <name>] [--strict|--no-strict] [--gitleaks|--no-gitleaks] [--max-file-kib <int>] [--max-history-kib <int>] [--history-object-limit <int>] [--config <path>] [--no-config]`
+- `repo-preflight check --sarif ...` (SARIF 2.1.0 output)
+- `repo-preflight check --compact ...` (compact CI log output)
 - `repo-preflight list-checks`
 - `repo-preflight list-rule-packs`
 
-### Output schema (v0.1.3)
+### JSON output schema (v0.1.4)
 
 ```json
 {
@@ -19,6 +21,8 @@
   "strict": true,
   "config_path": "/abs/path/.repo-preflight.toml",
   "max_tracked_file_kib": 2048,
+  "max_history_blob_kib": 2048,
+  "history_object_limit": 10000,
   "check_ids": ["readme_present", "tracked_env_files"],
   "summary": { "pass": 0, "warn": 0, "fail": 0 },
   "exit_code": 0,
@@ -32,6 +36,12 @@
   ]
 }
 ```
+
+### SARIF output
+
+- Schema: `2.1.0`
+- Includes repo-preflight checks as SARIF rules
+- Emits only non-pass results as SARIF findings
 
 ### Exit code behavior
 
