@@ -33,6 +33,99 @@ def _tracked_files(path: Path) -> list[str]:
     return [line.strip() for line in proc.stdout.splitlines() if line.strip()]
 
 
+def check_git_repository(path: Path) -> CheckResult:
+    if _is_git_repo(path):
+        return CheckResult("git_repository", "pass", "Path is a git repository")
+
+    return CheckResult(
+        "git_repository",
+        "fail",
+        "Path is not a git repository",
+        "Run 'git init' (or use an existing repo) before running publish checks.",
+    )
+
+
+def check_remote_origin(path: Path) -> CheckResult:
+    if not _is_git_repo(path):
+        return CheckResult(
+            "remote_origin",
+            "warn",
+            "Not a git repository; skipped origin remote check",
+            "Initialize git and configure an origin remote.",
+        )
+
+    proc = _run(["git", "remote", "get-url", "origin"], path)
+    if proc.returncode != 0:
+        return CheckResult(
+            "remote_origin",
+            "warn",
+            "No 'origin' remote configured",
+            "Add a publish target with: git remote add origin <url>",
+        )
+
+    url = proc.stdout.strip()
+    return CheckResult("remote_origin", "pass", f"origin remote configured ({url})")
+
+
+def check_clean_worktree(path: Path) -> CheckResult:
+    if not _is_git_repo(path):
+        return CheckResult(
+            "clean_worktree",
+            "warn",
+            "Not a git repository; skipped worktree cleanliness check",
+            "Initialize git and commit changes before publish checks.",
+        )
+
+    proc = _run(["git", "status", "--porcelain"], path)
+    if proc.returncode != 0:
+        return CheckResult(
+            "clean_worktree",
+            "warn",
+            "Could not determine git worktree state",
+            "Run 'git status' manually and resolve repository state.",
+        )
+
+    if proc.stdout.strip() == "":
+        return CheckResult("clean_worktree", "pass", "Working tree is clean")
+
+    return CheckResult(
+        "clean_worktree",
+        "warn",
+        "Working tree has uncommitted changes",
+        "Commit or stash pending changes before publishing.",
+    )
+
+
+def check_default_branch(path: Path) -> CheckResult:
+    if not _is_git_repo(path):
+        return CheckResult(
+            "default_branch_style",
+            "warn",
+            "Not a git repository; skipped branch check",
+            "Initialize git and align branch naming conventions.",
+        )
+
+    proc = _run(["git", "branch", "--show-current"], path)
+    if proc.returncode != 0:
+        return CheckResult(
+            "default_branch_style",
+            "warn",
+            "Could not determine current branch",
+            "Check branch naming manually (prefer main).",
+        )
+
+    branch = proc.stdout.strip()
+    if branch in {"main", "master"}:
+        return CheckResult("default_branch_style", "pass", f"Current branch '{branch}' is conventional")
+
+    return CheckResult(
+        "default_branch_style",
+        "warn",
+        f"Current branch is '{branch}'",
+        "Consider using 'main' (or a documented branch policy) before public release.",
+    )
+
+
 def check_readme(path: Path) -> CheckResult:
     if (path / "README.md").exists():
         return CheckResult("readme_present", "pass", "README.md present")
@@ -52,6 +145,42 @@ def check_license(path: Path) -> CheckResult:
         "warn",
         "No license file found",
         "Add LICENSE (e.g., MIT) so reuse terms are explicit.",
+    )
+
+
+def check_license_spdx(path: Path) -> CheckResult:
+    license_file = path / "LICENSE"
+    if not license_file.exists():
+        license_file = path / "LICENSE.md"
+
+    if not license_file.exists():
+        return CheckResult(
+            "license_identifier",
+            "warn",
+            "No license file found; skipped license identifier check",
+            "Add a LICENSE file and include an SPDX identifier where practical.",
+        )
+
+    text = license_file.read_text(encoding="utf-8", errors="ignore")
+    normalized = text.lower()
+
+    if "spdx-license-identifier:" in normalized:
+        return CheckResult("license_identifier", "pass", "SPDX identifier found in license file")
+
+    known_markers = ["mit license", "apache license", "mozilla public license", "gnu general public license", "bsd"]
+    if any(marker in normalized for marker in known_markers):
+        return CheckResult(
+            "license_identifier",
+            "warn",
+            "License text found but no explicit SPDX identifier",
+            "Optional: add an SPDX identifier line for machine-readable license parsing.",
+        )
+
+    return CheckResult(
+        "license_identifier",
+        "warn",
+        "Could not recognize license text format",
+        "Verify license file contents and consider adding an SPDX identifier.",
     )
 
 
@@ -176,8 +305,13 @@ def check_gitleaks(path: Path) -> CheckResult:
 
 def run_checks(path: Path, *, include_gitleaks: bool = True) -> list[CheckResult]:
     results = [
+        check_git_repository(path),
+        check_remote_origin(path),
+        check_clean_worktree(path),
+        check_default_branch(path),
         check_readme(path),
         check_license(path),
+        check_license_spdx(path),
         check_security(path),
         check_gitignore_secrets(path),
         check_tracked_env(path),
