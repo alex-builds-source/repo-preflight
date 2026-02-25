@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.11] - 2026-02-25
+### Changed
+- Synced package metadata versioning by aligning `pyproject.toml` with runtime `__version__`.
+- Added regression coverage to ensure project metadata and package version stay in lockstep.
+
 ## [0.1.10] - 2026-02-25
 ### Changed
 - Rule-pack profiles now set diff-size defaults for `max_diff_files` and `max_diff_changed_lines`.
