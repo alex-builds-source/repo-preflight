@@ -15,7 +15,9 @@ from .checks import (
     DEFAULT_MAX_HISTORY_BLOB_KIB,
     DEFAULT_MAX_TRACKED_FILE_KIB,
     CheckResult,
+    available_check_groups,
     available_check_ids,
+    check_ids_for_groups,
     check_ids_for_profile,
     run_checks,
     validate_check_ids,
@@ -126,6 +128,9 @@ def resolve_runtime(
     gitleaks_enabled = defaults["gitleaks"]
 
     check_ids = check_ids_for_profile(profile)
+    if args.check_group:
+        check_ids = check_ids_for_groups(args.check_group)
+
     severity_overrides: dict[str, str] = {}
 
     if rule_pack_name is not None:
@@ -759,6 +764,13 @@ def cmd_list_rule_packs(_: argparse.Namespace) -> int:
 
 def _add_common_policy_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--profile", choices=["quick", "full", "ci"], help="Check profile")
+    parser.add_argument(
+        "--check-group",
+        dest="check_group",
+        action="append",
+        choices=available_check_groups(),
+        help="Optional check group filter (repeatable) for faster local runs",
+    )
     parser.add_argument(
         "--rule-pack",
         choices=available_rule_packs(),

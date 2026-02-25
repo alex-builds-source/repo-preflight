@@ -5,7 +5,7 @@
 ## Machine-readable interface
 
 ### Commands
-- `repo-preflight check --json --path <repo> [--profile <quick|full|ci>] [--rule-pack <name>] [--strict|--no-strict] [--gitleaks|--no-gitleaks] [--max-file-kib <int>] [--max-history-kib <int>] [--history-object-limit <int>] [--max-diff-files <int>] [--max-diff-changed-lines <int>] [--max-diff-object-kib <int>] [--diff-mode <manual|pr>] [--pr-base-ref <ref>] [--diff-base <ref>] [--diff-target <ref>] [--config <path>] [--no-config]`
+- `repo-preflight check --json --path <repo> [--profile <quick|full|ci>] [--check-group <foundation|docs|secrets|size|diff>]... [--rule-pack <name>] [--strict|--no-strict] [--gitleaks|--no-gitleaks] [--max-file-kib <int>] [--max-history-kib <int>] [--history-object-limit <int>] [--max-diff-files <int>] [--max-diff-changed-lines <int>] [--max-diff-object-kib <int>] [--diff-mode <manual|pr>] [--pr-base-ref <ref>] [--diff-base <ref>] [--diff-target <ref>] [--config <path>] [--no-config]`
 - `repo-preflight check --sarif ...` (SARIF 2.1.0 output)
 - `repo-preflight check --compact ...` (compact CI log output)
 - `repo-preflight policy-doc [--output <path>] ...` (render effective policy markdown)
@@ -13,7 +13,7 @@
 - `repo-preflight list-checks`
 - `repo-preflight list-rule-packs`
 
-### JSON output schema (v0.1.8)
+### JSON output schema (v0.1.9)
 
 ```json
 {

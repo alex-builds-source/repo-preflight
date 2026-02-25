@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.9] - 2026-02-25
+### Added
+- Optional repeatable check-group filtering via `--check-group` for faster focused runs.
+- Built-in check groups: `foundation`, `docs`, `secrets`, `size`, `diff`.
+
+### Changed
+- `diff_object_sizes` now evaluates blobs in a base/target tree-aware way for PR/diff robustness.
+- Expanded tests for check-group runtime filtering and tree-aware diff object-size behavior.
+
 ## [0.1.8] - 2026-02-25
 ### Added
 - Diff object-size check: `diff_object_sizes`.

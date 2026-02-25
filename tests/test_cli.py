@@ -21,6 +21,7 @@ class ArgsStub:
         *,
         profile=None,
         rule_pack=None,
+        check_group=None,
         strict=None,
         gitleaks=None,
         max_file_kib=None,
@@ -36,6 +37,7 @@ class ArgsStub:
     ):
         self.profile = profile
         self.rule_pack = rule_pack
+        self.check_group = check_group
         self.strict = strict
         self.gitleaks = gitleaks
         self.max_file_kib = max_file_kib
@@ -232,6 +234,34 @@ def test_resolve_runtime_merges_cli_over_config():
     assert pr_base_ref == "origin/develop"
     assert diff_base == "origin/develop"
     assert diff_target == "HEAD~1"
+
+
+def test_resolve_runtime_check_groups_filter_checks():
+    cfg = PreflightConfig(profile="ci")
+    args = ArgsStub(profile="ci", check_group=["diff"])
+
+    (
+        _profile,
+        _rule_pack,
+        _strict,
+        _gitleaks,
+        checks,
+        _overrides,
+        _max_file_kib,
+        _max_history_kib,
+        _history_limit,
+        _max_diff_files,
+        _max_diff_changed_lines,
+        _max_diff_object_kib,
+        _diff_mode,
+        _pr_base_ref,
+        _diff_base,
+        _diff_target,
+    ) = resolve_runtime(args, cfg)
+
+    assert "diff_patch_size" in checks
+    assert "gitleaks_scan" not in checks
+    assert "readme_present" not in checks
 
 
 def test_resolve_runtime_pr_mode_uses_ci_env(monkeypatch):

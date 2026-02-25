@@ -3,7 +3,7 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-from repo_preflight.checks import check_ids_for_profile, run_checks
+from repo_preflight.checks import check_ids_for_groups, check_ids_for_profile, run_checks
 
 
 def _run(cmd: list[str], cwd: Path) -> None:
@@ -41,6 +41,13 @@ def _add_origin(path: Path, tmp_path: Path) -> None:
 
 def _full_without_gitleaks() -> list[str]:
     return [c for c in check_ids_for_profile("full") if c != "gitleaks_scan"]
+
+
+def test_check_groups_resolve_in_registry_order():
+    groups = check_ids_for_groups(["diff", "foundation"])
+    assert "git_repository" in groups
+    assert "diff_patch_size" in groups
+    assert groups.index("git_repository") < groups.index("diff_patch_size")
 
 
 def test_happy_path_without_gitleaks(tmp_path: Path):
@@ -195,6 +202,29 @@ def test_diff_object_sizes_warn_for_large_changed_blob(tmp_path: Path):
     )
     assert results[0].id == "diff_object_sizes"
     assert results[0].status == "warn"
+
+
+def test_diff_object_sizes_is_base_target_tree_aware(tmp_path: Path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _init_repo(repo)
+    _write_bytes(repo, "assets/blob.bin", 4096)
+    _commit_all(repo, "base has large blob")
+
+    _run(["git", "checkout", "-b", "feature/shrink"], repo)
+    _write_bytes(repo, "assets/blob.bin", 16)
+    _commit_all(repo, "shrink blob")
+
+    results = run_checks(
+        repo,
+        check_ids=["diff_object_sizes"],
+        diff_base="main",
+        diff_target="HEAD",
+        max_diff_object_kib=1,
+    )
+    assert results[0].id == "diff_object_sizes"
+    assert results[0].status == "warn"
+    assert "base/target tree-aware" in results[0].message
 
 
 def test_severity_override_changes_status(tmp_path: Path):

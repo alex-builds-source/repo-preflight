@@ -22,6 +22,8 @@ repo-preflight check --path /path/to/repo
 repo-preflight check --profile quick
 repo-preflight check --profile ci
 repo-preflight check --rule-pack oss-library
+repo-preflight check --check-group diff
+repo-preflight check --check-group foundation --check-group secrets
 repo-preflight check --strict
 repo-preflight check --gitleaks
 repo-preflight check --no-gitleaks
@@ -96,7 +98,17 @@ exclude = ["clean_worktree"]
 license_present = "fail"
 ```
 
-## Checks (v0.1.8)
+## Check groups
+
+Use `--check-group` (repeatable) to run focused subsets of checks:
+
+- `foundation`: git/repo hygiene (`git_repository`, `remote_origin`, `clean_worktree`, `default_branch_style`)
+- `docs`: docs/license/security policy checks
+- `secrets`: secret-exposure focused checks (including `gitleaks_scan`)
+- `size`: tracked/history/diff size checks
+- `diff`: PR/diff-aware checks
+
+## Checks (v0.1.9)
 
 - `git_repository` (fail)
 - `remote_origin` (warn)

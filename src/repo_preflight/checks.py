@@ -84,6 +84,42 @@ def _diff_numstat(path: Path, *, diff_base: str | None, diff_target: str) -> tup
     return out, None
 
 
+def _diff_name_status(
+    path: Path, *, diff_base: str | None, diff_target: str
+) -> tuple[list[tuple[str, str | None, str | None]] | None, str | None]:
+    if not diff_base:
+        return None, None
+
+    range_spec = f"{diff_base}...{diff_target}"
+    proc = _run(
+        [
+            "git",
+            "diff",
+            "--name-status",
+            "--find-renames",
+            "--find-copies",
+            "--diff-filter=ACMRT",
+            range_spec,
+        ],
+        path,
+    )
+    if proc.returncode != 0:
+        return None, proc.stderr.strip() or proc.stdout.strip() or "unknown git diff name-status error"
+
+    out: list[tuple[str, str | None, str | None]] = []
+    for line in proc.stdout.splitlines():
+        parts = line.split("\t")
+        if len(parts) < 2:
+            continue
+        status = parts[0].strip()[:1]
+        if status in {"R", "C"} and len(parts) >= 3:
+            out.append((status, parts[1].strip(), parts[2].strip()))
+        else:
+            out.append((status, parts[1].strip(), parts[1].strip()))
+
+    return out, None
+
+
 def _blob_size_at_ref(path: Path, *, ref: str, file_path: str) -> tuple[int | None, str | None]:
     proc = _run(["git", "cat-file", "-s", f"{ref}:{file_path}"], path)
     if proc.returncode != 0:
@@ -596,7 +632,7 @@ def check_diff_object_sizes(
             "No diff base configured; diff-aware checks skipped",
         )
 
-    changed, err = _diff_changed_files(path, diff_base=diff_base, diff_target=diff_target)
+    entries, err = _diff_name_status(path, diff_base=diff_base, diff_target=diff_target)
     if err is not None:
         return CheckResult(
             "diff_object_sizes",
@@ -605,7 +641,7 @@ def check_diff_object_sizes(
             "Verify refs exist locally (e.g., fetch origin) and re-run.",
         )
 
-    if not changed:
+    if not entries:
         return CheckResult(
             "diff_object_sizes",
             "pass",
@@ -614,19 +650,29 @@ def check_diff_object_sizes(
 
     threshold = max_object_kib * 1024
     oversized: list[tuple[str, int]] = []
-    for rel in changed:
-        size, size_err = _blob_size_at_ref(path, ref=diff_target, file_path=rel)
-        if size_err is not None or size is None:
-            # deleted/moved paths may not exist at target ref; ignore those here
-            continue
-        if size > threshold:
-            oversized.append((rel, size))
+    for status, old_path, new_path in entries:
+        candidates: list[tuple[str, str]] = []
+        if old_path:
+            candidates.append((diff_base, old_path))
+        if new_path:
+            candidates.append((diff_target, new_path))
+
+        max_seen = -1
+        display_path = new_path or old_path or "(unknown)"
+        for ref, rel_path in candidates:
+            size, size_err = _blob_size_at_ref(path, ref=ref, file_path=rel_path)
+            if size_err is not None or size is None:
+                continue
+            max_seen = max(max_seen, size)
+
+        if max_seen > threshold:
+            oversized.append((display_path, max_seen))
 
     if not oversized:
         return CheckResult(
             "diff_object_sizes",
             "pass",
-            f"No changed blob objects above {max_object_kib} KiB in {diff_base}...{diff_target}",
+            f"No changed blob objects above {max_object_kib} KiB in {diff_base}...{diff_target} (base/target tree-aware)",
         )
 
     oversized.sort(key=lambda x: x[1], reverse=True)
@@ -635,7 +681,7 @@ def check_diff_object_sizes(
     return CheckResult(
         "diff_object_sizes",
         "warn",
-        f"Changed blob objects exceed {max_object_kib} KiB in {diff_base}...{diff_target}: {preview}{more}",
+        f"Changed blob objects exceed {max_object_kib} KiB in {diff_base}...{diff_target} (base/target tree-aware): {preview}{more}",
         "Consider Git LFS or artifact storage for large changed binary assets.",
     )
 
@@ -779,9 +825,56 @@ PROFILE_CHECK_IDS = {
     "ci": list(CHECK_REGISTRY.keys()),
 }
 
+CHECK_GROUP_IDS = {
+    "foundation": [
+        "git_repository",
+        "remote_origin",
+        "clean_worktree",
+        "default_branch_style",
+    ],
+    "docs": [
+        "readme_present",
+        "license_present",
+        "license_identifier",
+        "security_policy_present",
+    ],
+    "secrets": [
+        "gitignore_basics",
+        "tracked_env_files",
+        "tracked_keylike_files",
+        "gitleaks_scan",
+    ],
+    "size": [
+        "tracked_large_files",
+        "history_large_blobs",
+        "diff_large_files",
+        "diff_object_sizes",
+    ],
+    "diff": [
+        "diff_changed_files",
+        "diff_patch_size",
+        "diff_large_files",
+        "diff_object_sizes",
+    ],
+}
+
 
 def available_check_ids() -> list[str]:
     return list(CHECK_REGISTRY.keys())
+
+
+def available_check_groups() -> list[str]:
+    return list(CHECK_GROUP_IDS.keys())
+
+
+def check_ids_for_groups(groups: list[str]) -> list[str]:
+    ordered_ids = available_check_ids()
+    selected: set[str] = set()
+    for group in groups:
+        if group not in CHECK_GROUP_IDS:
+            raise ValueError(f"Unknown check group: {group}")
+        selected.update(CHECK_GROUP_IDS[group])
+    return [check_id for check_id in ordered_ids if check_id in selected]
 
 
 def check_ids_for_profile(profile: str) -> list[str]:
