@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.5] - 2026-02-25
+### Added
+- Diff-aware checks:
+  - `diff_changed_files`
+  - `diff_large_files`
+- Diff controls via CLI/config:
+  - `--diff-base`, `--diff-target`
+  - `preflight.diff_base`, `preflight.diff_target`
+
+### Changed
+- JSON output now includes `diff_base` and `diff_target`.
+- SARIF output now includes diff metadata in run properties.
+- Expanded tests for diff-aware behavior.
+
 ## [0.1.4] - 2026-02-25
 ### Added
 - History-aware large-blob check: `history_large_blobs`.

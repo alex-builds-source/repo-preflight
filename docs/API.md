@@ -5,13 +5,13 @@
 ## Machine-readable interface
 
 ### Commands
-- `repo-preflight check --json --path <repo> [--profile <quick|full|ci>] [--rule-pack <name>] [--strict|--no-strict] [--gitleaks|--no-gitleaks] [--max-file-kib <int>] [--max-history-kib <int>] [--history-object-limit <int>] [--config <path>] [--no-config]`
+- `repo-preflight check --json --path <repo> [--profile <quick|full|ci>] [--rule-pack <name>] [--strict|--no-strict] [--gitleaks|--no-gitleaks] [--max-file-kib <int>] [--max-history-kib <int>] [--history-object-limit <int>] [--diff-base <ref>] [--diff-target <ref>] [--config <path>] [--no-config]`
 - `repo-preflight check --sarif ...` (SARIF 2.1.0 output)
 - `repo-preflight check --compact ...` (compact CI log output)
 - `repo-preflight list-checks`
 - `repo-preflight list-rule-packs`
 
-### JSON output schema (v0.1.4)
+### JSON output schema (v0.1.5)
 
 ```json
 {
@@ -23,6 +23,8 @@
   "max_tracked_file_kib": 2048,
   "max_history_blob_kib": 2048,
   "history_object_limit": 10000,
+  "diff_base": "origin/main",
+  "diff_target": "HEAD",
   "check_ids": ["readme_present", "tracked_env_files"],
   "summary": { "pass": 0, "warn": 0, "fail": 0 },
   "exit_code": 0,

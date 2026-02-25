@@ -27,6 +27,7 @@ repo-preflight check --no-gitleaks
 repo-preflight check --max-file-kib 2048
 repo-preflight check --max-history-kib 2048
 repo-preflight check --history-object-limit 5000
+repo-preflight check --diff-base origin/main --diff-target HEAD
 repo-preflight check --json
 repo-preflight check --compact
 repo-preflight check --sarif
@@ -50,6 +51,15 @@ CLI flags can override profile defaults.
 
 Rule packs set policy defaults and can still be overridden by config/CLI.
 
+## Diff-aware checks
+
+When `--diff-base` is provided, preflight additionally evaluates changed files in the range:
+
+- `diff_changed_files`
+- `diff_large_files`
+
+This is useful in PR/CI flows where you want attention on what changed.
+
 ## Config file (`.repo-preflight.toml`)
 
 By default, `repo-preflight` loads config from the target path.
@@ -62,6 +72,8 @@ Example:
 profile = "ci"
 rule_pack = "oss-library"
 strict = true
+diff_base = "origin/main"
+diff_target = "HEAD"
 max_tracked_file_kib = 2048
 max_history_blob_kib = 2048
 history_object_limit = 10000
@@ -73,7 +85,7 @@ exclude = ["clean_worktree"]
 license_present = "fail"
 ```
 
-## Checks (v0.1.4)
+## Checks (v0.1.5)
 
 - `git_repository` (fail)
 - `remote_origin` (warn)
@@ -88,6 +100,8 @@ license_present = "fail"
 - `tracked_keylike_files` (fail)
 - `tracked_large_files` (warn)
 - `history_large_blobs` (warn)
+- `diff_changed_files` (pass/warn)
+- `diff_large_files` (pass/warn)
 - `gitleaks_scan` (pass/warn/fail)
 
 Exit codes:

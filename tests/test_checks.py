@@ -164,6 +164,42 @@ def test_history_large_blob_warns_even_if_not_tracked_anymore(tmp_path: Path):
     assert status_by_id["history_large_blobs"] == "warn"
 
 
+def test_diff_checks_skip_without_base(tmp_path: Path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _init_repo(repo)
+    _write(repo, "README.md", "# Demo\n")
+    _commit_all(repo)
+
+    results = run_checks(repo, check_ids=["diff_changed_files", "diff_large_files"])
+    status_by_id = {r.id: r.status for r in results}
+    assert status_by_id["diff_changed_files"] == "pass"
+    assert status_by_id["diff_large_files"] == "pass"
+
+
+def test_diff_large_file_warns_between_base_and_head(tmp_path: Path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _init_repo(repo)
+    _write(repo, "README.md", "# Demo\n")
+    _commit_all(repo, "base")
+
+    _run(["git", "checkout", "-b", "feature/diff"], repo)
+    _write_bytes(repo, "assets/new-big.bin", 4096)
+    _commit_all(repo, "add big changed file")
+
+    results = run_checks(
+        repo,
+        check_ids=["diff_changed_files", "diff_large_files"],
+        diff_base="main",
+        diff_target="HEAD",
+        max_tracked_file_kib=1,
+    )
+    status_by_id = {r.id: r.status for r in results}
+    assert status_by_id["diff_changed_files"] == "pass"
+    assert status_by_id["diff_large_files"] == "warn"
+
+
 def test_severity_override_changes_status(tmp_path: Path):
     repo = tmp_path / "repo"
     repo.mkdir()

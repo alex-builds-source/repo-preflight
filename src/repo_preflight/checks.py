@@ -10,6 +10,7 @@ VALID_STATUSES = {"pass", "warn", "fail"}
 DEFAULT_MAX_TRACKED_FILE_KIB = 5120  # 5 MiB
 DEFAULT_MAX_HISTORY_BLOB_KIB = 5120  # 5 MiB
 DEFAULT_HISTORY_OBJECT_LIMIT = 20000
+DEFAULT_DIFF_TARGET = "HEAD"
 
 
 @dataclass
@@ -37,6 +38,19 @@ def _tracked_files(path: Path) -> list[str]:
     if proc.returncode != 0:
         return []
     return [line.strip() for line in proc.stdout.splitlines() if line.strip()]
+
+
+def _diff_changed_files(path: Path, *, diff_base: str | None, diff_target: str) -> tuple[list[str] | None, str | None]:
+    if not diff_base:
+        return None, None
+
+    range_spec = f"{diff_base}...{diff_target}"
+    proc = _run(["git", "diff", "--name-only", "--diff-filter=ACMRT", range_spec], path)
+    if proc.returncode != 0:
+        return None, proc.stderr.strip() or proc.stdout.strip() or "unknown git diff error"
+
+    changed = [line.strip() for line in proc.stdout.splitlines() if line.strip()]
+    return changed, None
 
 
 def check_git_repository(path: Path) -> CheckResult:
@@ -407,6 +421,116 @@ def check_history_large_blobs(
     )
 
 
+def check_diff_changed_files(path: Path, *, diff_base: str | None = None, diff_target: str = DEFAULT_DIFF_TARGET) -> CheckResult:
+    if not _is_git_repo(path):
+        return CheckResult(
+            "diff_changed_files",
+            "warn",
+            "Not a git repository; skipped diff-aware changed-files check",
+            "Initialize git and re-run checks.",
+        )
+
+    if not diff_base:
+        return CheckResult(
+            "diff_changed_files",
+            "pass",
+            "No diff base configured; diff-aware checks skipped",
+        )
+
+    changed, err = _diff_changed_files(path, diff_base=diff_base, diff_target=diff_target)
+    if err is not None:
+        return CheckResult(
+            "diff_changed_files",
+            "warn",
+            f"Could not compute diff for {diff_base}...{diff_target}: {err}",
+            "Verify refs exist locally (e.g., fetch origin) and re-run.",
+        )
+
+    if not changed:
+        return CheckResult(
+            "diff_changed_files",
+            "pass",
+            f"No changed files between {diff_base}...{diff_target}",
+        )
+
+    preview = ", ".join(changed[:5])
+    more = "" if len(changed) <= 5 else f" (+{len(changed) - 5} more)"
+    return CheckResult(
+        "diff_changed_files",
+        "pass",
+        f"{len(changed)} changed files between {diff_base}...{diff_target}: {preview}{more}",
+    )
+
+
+def check_diff_large_files(
+    path: Path,
+    *,
+    diff_base: str | None = None,
+    diff_target: str = DEFAULT_DIFF_TARGET,
+    max_file_kib: int = DEFAULT_MAX_TRACKED_FILE_KIB,
+) -> CheckResult:
+    if not _is_git_repo(path):
+        return CheckResult(
+            "diff_large_files",
+            "warn",
+            "Not a git repository; skipped diff-aware large-file check",
+            "Initialize git and re-run checks.",
+        )
+
+    if not diff_base:
+        return CheckResult(
+            "diff_large_files",
+            "pass",
+            "No diff base configured; diff-aware checks skipped",
+        )
+
+    changed, err = _diff_changed_files(path, diff_base=diff_base, diff_target=diff_target)
+    if err is not None:
+        return CheckResult(
+            "diff_large_files",
+            "warn",
+            f"Could not compute diff for {diff_base}...{diff_target}: {err}",
+            "Verify refs exist locally (e.g., fetch origin) and re-run.",
+        )
+
+    if not changed:
+        return CheckResult(
+            "diff_large_files",
+            "pass",
+            f"No changed files between {diff_base}...{diff_target}",
+        )
+
+    threshold_bytes = max_file_kib * 1024
+    oversized: list[tuple[str, int]] = []
+    for rel in changed:
+        p = path / rel
+        if not p.exists() or not p.is_file():
+            continue
+        try:
+            size = p.stat().st_size
+        except OSError:
+            continue
+        if size > threshold_bytes:
+            oversized.append((rel, size))
+
+    if not oversized:
+        return CheckResult(
+            "diff_large_files",
+            "pass",
+            f"No changed files above {max_file_kib} KiB in {diff_base}...{diff_target}",
+        )
+
+    oversized.sort(key=lambda x: x[1], reverse=True)
+    preview = ", ".join(f"{name} ({size // 1024} KiB)" for name, size in oversized[:5])
+    more = "" if len(oversized) <= 5 else f" (+{len(oversized) - 5} more)"
+    return CheckResult(
+        "diff_large_files",
+        "warn",
+        f"Changed files exceed {max_file_kib} KiB in {diff_base}...{diff_target}: {preview}{more}",
+        "Consider Git LFS or artifact storage for large changed binaries.",
+    )
+
+
 def check_gitleaks(path: Path) -> CheckResult:
     if not _is_git_repo(path):
         return CheckResult(
@@ -458,6 +582,8 @@ CHECK_REGISTRY = {
     "tracked_keylike_files": check_tracked_keylike_files,
     "tracked_large_files": check_tracked_large_files,
     "history_large_blobs": check_history_large_blobs,
+    "diff_changed_files": check_diff_changed_files,
+    "diff_large_files": check_diff_large_files,
     "gitleaks_scan": check_gitleaks,
 }
 
@@ -511,6 +637,8 @@ def run_checks(
     max_tracked_file_kib: int = DEFAULT_MAX_TRACKED_FILE_KIB,
     max_history_blob_kib: int = DEFAULT_MAX_HISTORY_BLOB_KIB,
     history_object_limit: int = DEFAULT_HISTORY_OBJECT_LIMIT,
+    diff_base: str | None = None,
+    diff_target: str = DEFAULT_DIFF_TARGET,
 ) -> list[CheckResult]:
     unknown = validate_check_ids(check_ids)
     if unknown:
@@ -527,6 +655,15 @@ def run_checks(
                 path,
                 max_blob_kib=max_history_blob_kib,
                 object_limit=history_object_limit,
+            )
+        elif check_id == "diff_changed_files":
+            result = check_diff_changed_files(path, diff_base=diff_base, diff_target=diff_target)
+        elif check_id == "diff_large_files":
+            result = check_diff_large_files(
+                path,
+                diff_base=diff_base,
+                diff_target=diff_target,
+                max_file_kib=max_tracked_file_kib,
             )
         else:
             result = CHECK_REGISTRY[check_id](path)

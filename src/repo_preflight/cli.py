@@ -6,6 +6,7 @@ from pathlib import Path
 
 from . import __version__
 from .checks import (
+    DEFAULT_DIFF_TARGET,
     DEFAULT_HISTORY_OBJECT_LIMIT,
     DEFAULT_MAX_HISTORY_BLOB_KIB,
     DEFAULT_MAX_TRACKED_FILE_KIB,
@@ -61,7 +62,7 @@ def _level_for_status(status: str) -> str:
 def resolve_runtime(
     args: argparse.Namespace,
     cfg: PreflightConfig,
-) -> tuple[str, str | None, bool, bool, list[str], dict[str, str], int, int, int]:
+) -> tuple[str, str | None, bool, bool, list[str], dict[str, str], int, int, int, str | None, str]:
     profile = args.profile or cfg.profile or "full"
     rule_pack_name = args.rule_pack or cfg.rule_pack
 
@@ -119,6 +120,9 @@ def resolve_runtime(
     if args.history_object_limit is not None:
         history_object_limit = args.history_object_limit
 
+    diff_base = args.diff_base if args.diff_base is not None else cfg.diff_base
+    diff_target = args.diff_target or cfg.diff_target or DEFAULT_DIFF_TARGET
+
     if max_tracked_file_kib <= 0:
         raise ValueError("max tracked file size must be > 0 KiB")
     if max_history_blob_kib <= 0:
@@ -151,6 +155,8 @@ def resolve_runtime(
         max_tracked_file_kib,
         max_history_blob_kib,
         history_object_limit,
+        diff_base,
+        diff_target,
     )
 
 
@@ -165,6 +171,8 @@ def print_human(
     max_tracked_file_kib: int,
     max_history_blob_kib: int,
     history_object_limit: int,
+    diff_base: str | None,
+    diff_target: str,
 ) -> None:
     summary = summarize(results)
     code = exit_code(summary, strict=strict)
@@ -179,6 +187,8 @@ def print_human(
     print(f"max_tracked_file_kib: {max_tracked_file_kib}")
     print(f"max_history_blob_kib: {max_history_blob_kib}")
     print(f"history_object_limit: {history_object_limit}")
+    print(f"diff_base: {diff_base or 'none'}")
+    print(f"diff_target: {diff_target}")
     print(f"checks: {', '.join(check_ids)}")
 
     for r in results:
@@ -188,12 +198,22 @@ def print_human(
             print(f"  fix: {r.fix}")
 
 
-def print_compact(path: Path, results: list[CheckResult], *, strict: bool, profile: str, rule_pack: str | None) -> None:
+def print_compact(
+    path: Path,
+    results: list[CheckResult],
+    *,
+    strict: bool,
+    profile: str,
+    rule_pack: str | None,
+    diff_base: str | None,
+    diff_target: str,
+) -> None:
     summary = summarize(results)
     code = exit_code(summary, strict=strict)
     overall = "FAIL" if code == 2 else ("WARN" if summary["warn"] else "PASS")
+    diff_repr = f"{diff_base}...{diff_target}" if diff_base else "none"
     print(
-        f"repo-preflight {overall} path={path} profile={profile} rule_pack={rule_pack or 'none'} fail={summary['fail']} warn={summary['warn']} pass={summary['pass']}"
+        f"repo-preflight {overall} path={path} profile={profile} rule_pack={rule_pack or 'none'} diff={diff_repr} fail={summary['fail']} warn={summary['warn']} pass={summary['pass']}"
     )
 
     for r in results:
@@ -215,6 +235,8 @@ def build_payload(
     max_tracked_file_kib: int,
     max_history_blob_kib: int,
     history_object_limit: int,
+    diff_base: str | None,
+    diff_target: str,
 ) -> dict:
     summary = summarize(results)
     return {
@@ -226,6 +248,8 @@ def build_payload(
         "max_tracked_file_kib": max_tracked_file_kib,
         "max_history_blob_kib": max_history_blob_kib,
         "history_object_limit": history_object_limit,
+        "diff_base": diff_base,
+        "diff_target": diff_target,
         "check_ids": check_ids,
         "summary": summary,
         "exit_code": exit_code(summary, strict=strict),
@@ -242,6 +266,8 @@ def build_sarif_payload(
     rule_pack: str | None,
     check_ids: list[str],
     config_path: str | None,
+    diff_base: str | None,
+    diff_target: str,
 ) -> dict:
     summary = summarize(results)
     code = exit_code(summary, strict=strict)
@@ -300,6 +326,8 @@ def build_sarif_payload(
                     "rule_pack": rule_pack,
                     "strict": strict,
                     "config_path": config_path,
+                    "diff_base": diff_base,
+                    "diff_target": diff_target,
                     "summary": summary,
                     "exit_code": code,
                 },
@@ -331,6 +359,8 @@ def cmd_check(args: argparse.Namespace) -> int:
             max_tracked_file_kib,
             max_history_blob_kib,
             history_object_limit,
+            diff_base,
+            diff_target,
         ) = resolve_runtime(args, cfg)
         results = run_checks(
             target,
@@ -339,6 +369,8 @@ def cmd_check(args: argparse.Namespace) -> int:
             max_tracked_file_kib=max_tracked_file_kib,
             max_history_blob_kib=max_history_blob_kib,
             history_object_limit=history_object_limit,
+            diff_base=diff_base,
+            diff_target=diff_target,
         )
     except ValueError as err:
         print(f"Error: {err}")
@@ -356,6 +388,8 @@ def cmd_check(args: argparse.Namespace) -> int:
         max_tracked_file_kib=max_tracked_file_kib,
         max_history_blob_kib=max_history_blob_kib,
         history_object_limit=history_object_limit,
+        diff_base=diff_base,
+        diff_target=diff_target,
     )
 
     if args.sarif:
@@ -368,10 +402,20 @@ def cmd_check(args: argparse.Namespace) -> int:
                 rule_pack=rule_pack,
                 check_ids=check_ids,
                 config_path=config_path_str,
+                diff_base=diff_base,
+                diff_target=diff_target,
             )
         )
     elif args.compact:
-        print_compact(target, results, strict=strict, profile=profile, rule_pack=rule_pack)
+        print_compact(
+            target,
+            results,
+            strict=strict,
+            profile=profile,
+            rule_pack=rule_pack,
+            diff_base=diff_base,
+            diff_target=diff_target,
+        )
     elif args.json:
         print_json(payload)
     else:
@@ -385,6 +429,8 @@ def cmd_check(args: argparse.Namespace) -> int:
             max_tracked_file_kib=max_tracked_file_kib,
             max_history_blob_kib=max_history_blob_kib,
             history_object_limit=history_object_limit,
+            diff_base=diff_base,
+            diff_target=diff_target,
         )
 
     return exit_code(summarize(results), strict=strict)
@@ -451,6 +497,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--history-object-limit",
         type=int,
         help=f"Maximum git objects scanned in history mode (default: {DEFAULT_HISTORY_OBJECT_LIMIT})",
+    )
+    check.add_argument("--diff-base", help="Base ref for diff-aware checks (e.g., origin/main)")
+    check.add_argument(
+        "--diff-target",
+        default=None,
+        help=f"Target ref for diff-aware checks (default: {DEFAULT_DIFF_TARGET})",
     )
     check.add_argument("--config", help="Path to config file (default: <path>/.repo-preflight.toml)")
     check.add_argument("--no-config", action="store_true", help="Ignore local config file")

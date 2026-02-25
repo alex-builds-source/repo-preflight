@@ -18,6 +18,8 @@ class PreflightConfig:
     rule_pack: str | None = None
     strict: bool | None = None
     no_gitleaks: bool | None = None
+    diff_base: str | None = None
+    diff_target: str | None = None
     max_tracked_file_kib: int | None = None
     max_history_blob_kib: int | None = None
     history_object_limit: int | None = None
@@ -80,6 +82,12 @@ def load_config(path: Path) -> PreflightConfig:
 
         if "no_gitleaks" in preflight:
             cfg.no_gitleaks = _as_bool(preflight["no_gitleaks"], key="preflight.no_gitleaks")
+
+        if "diff_base" in preflight:
+            cfg.diff_base = _as_str(preflight["diff_base"], key="preflight.diff_base")
+
+        if "diff_target" in preflight:
+            cfg.diff_target = _as_str(preflight["diff_target"], key="preflight.diff_target")
 
         if "max_tracked_file_kib" in preflight:
             cfg.max_tracked_file_kib = _as_positive_int(

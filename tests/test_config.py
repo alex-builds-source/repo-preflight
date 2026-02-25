@@ -11,6 +11,8 @@ def test_load_config_defaults_when_missing(tmp_path: Path):
     assert cfg.rule_pack is None
     assert cfg.strict is None
     assert cfg.no_gitleaks is None
+    assert cfg.diff_base is None
+    assert cfg.diff_target is None
     assert cfg.max_tracked_file_kib is None
     assert cfg.max_history_blob_kib is None
     assert cfg.history_object_limit is None
@@ -28,6 +30,8 @@ profile = "ci"
 rule_pack = "cli-tool"
 strict = true
 no_gitleaks = false
+diff_base = "origin/main"
+diff_target = "HEAD"
 max_tracked_file_kib = 2048
 max_history_blob_kib = 4096
 history_object_limit = 15000
@@ -48,6 +52,8 @@ license_present = "fail"
     assert cfg.rule_pack == "cli-tool"
     assert cfg.strict is True
     assert cfg.no_gitleaks is False
+    assert cfg.diff_base == "origin/main"
+    assert cfg.diff_target == "HEAD"
     assert cfg.max_tracked_file_kib == 2048
     assert cfg.max_history_blob_kib == 4096
     assert cfg.history_object_limit == 15000

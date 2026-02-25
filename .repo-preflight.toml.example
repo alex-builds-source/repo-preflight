@@ -10,6 +10,10 @@ profile = "full"
 strict = false
 no_gitleaks = false
 
+# Optional refs for diff-aware checks
+# diff_base = "origin/main"
+diff_target = "HEAD"
+
 # Warn thresholds
 max_tracked_file_kib = 5120
 max_history_blob_kib = 5120
