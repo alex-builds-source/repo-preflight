@@ -108,7 +108,7 @@ Use `--check-group` (repeatable) to run focused subsets of checks:
 - `size`: tracked/history/diff size checks
 - `diff`: PR/diff-aware checks
 
-## Checks (v0.1.9)
+## Checks (v0.1.10)
 
 - `git_repository` (fail)
 - `remote_origin` (warn)

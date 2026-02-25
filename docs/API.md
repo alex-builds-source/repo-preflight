@@ -13,7 +13,7 @@
 - `repo-preflight list-checks`
 - `repo-preflight list-rule-packs`
 
-### JSON output schema (v0.1.9)
+### JSON output schema (v0.1.10)
 
 ```json
 {

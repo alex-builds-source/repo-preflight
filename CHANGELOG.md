@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.10] - 2026-02-25
+### Changed
+- Rule-pack profiles now set diff-size defaults for `max_diff_files` and `max_diff_changed_lines`.
+- Runtime precedence remains explicit: CLI overrides config, config overrides rule-pack defaults.
+- Expanded runtime tests for pack defaults and override interactions.
+
 ## [0.1.9] - 2026-02-25
 ### Added
 - Optional repeatable check-group filtering via `--check-group` for faster focused runs.

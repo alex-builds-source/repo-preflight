@@ -11,6 +11,8 @@ class RulePack:
     include: tuple[str, ...] = ()
     exclude: tuple[str, ...] = ()
     severity_overrides: dict[str, str] = field(default_factory=dict)
+    max_diff_files: int | None = None
+    max_diff_changed_lines: int | None = None
 
 
 RULE_PACKS: dict[str, RulePack] = {
@@ -26,6 +28,8 @@ RULE_PACKS: dict[str, RulePack] = {
             "diff_large_files": "warn",
             "diff_object_sizes": "warn",
         },
+        max_diff_files=200,
+        max_diff_changed_lines=3000,
     ),
     "internal-service": RulePack(
         name="internal-service",
@@ -40,6 +44,8 @@ RULE_PACKS: dict[str, RulePack] = {
             "diff_large_files": "fail",
             "diff_object_sizes": "fail",
         },
+        max_diff_files=120,
+        max_diff_changed_lines=1800,
     ),
     "cli-tool": RulePack(
         name="cli-tool",
@@ -53,6 +59,8 @@ RULE_PACKS: dict[str, RulePack] = {
             "diff_large_files": "warn",
             "diff_object_sizes": "warn",
         },
+        max_diff_files=250,
+        max_diff_changed_lines=5000,
     ),
 }
 

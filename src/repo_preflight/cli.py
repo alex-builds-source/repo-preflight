@@ -132,9 +132,11 @@ def resolve_runtime(
         check_ids = check_ids_for_groups(args.check_group)
 
     severity_overrides: dict[str, str] = {}
+    selected_pack: RulePack | None = None
 
     if rule_pack_name is not None:
         pack = get_rule_pack(rule_pack_name)
+        selected_pack = pack
         if pack.strict is not None:
             strict = pack.strict
 
@@ -179,11 +181,19 @@ def resolve_runtime(
     if args.history_object_limit is not None:
         history_object_limit = args.history_object_limit
 
-    max_diff_files = cfg.max_diff_files or DEFAULT_MAX_DIFF_FILES
+    default_max_diff_files = (
+        selected_pack.max_diff_files if selected_pack and selected_pack.max_diff_files is not None else DEFAULT_MAX_DIFF_FILES
+    )
+    max_diff_files = cfg.max_diff_files or default_max_diff_files
     if args.max_diff_files is not None:
         max_diff_files = args.max_diff_files
 
-    max_diff_changed_lines = cfg.max_diff_changed_lines or DEFAULT_MAX_DIFF_CHANGED_LINES
+    default_max_diff_changed_lines = (
+        selected_pack.max_diff_changed_lines
+        if selected_pack and selected_pack.max_diff_changed_lines is not None
+        else DEFAULT_MAX_DIFF_CHANGED_LINES
+    )
+    max_diff_changed_lines = cfg.max_diff_changed_lines or default_max_diff_changed_lines
     if args.max_diff_changed_lines is not None:
         max_diff_changed_lines = args.max_diff_changed_lines
 

@@ -236,6 +236,33 @@ def test_resolve_runtime_merges_cli_over_config():
     assert diff_target == "HEAD~1"
 
 
+def test_rule_pack_diff_threshold_defaults_can_be_overridden_by_config_and_cli():
+    cfg = PreflightConfig(rule_pack="internal-service", max_diff_changed_lines=2200)
+    args = ArgsStub(rule_pack="internal-service", max_diff_files=150)
+
+    (
+        _profile,
+        _rule_pack,
+        _strict,
+        _gitleaks,
+        _checks,
+        _overrides,
+        _max_file_kib,
+        _max_history_kib,
+        _history_limit,
+        max_diff_files,
+        max_diff_changed_lines,
+        _max_diff_object_kib,
+        _diff_mode,
+        _pr_base_ref,
+        _diff_base,
+        _diff_target,
+    ) = resolve_runtime(args, cfg)
+
+    assert max_diff_files == 150
+    assert max_diff_changed_lines == 2200
+
+
 def test_resolve_runtime_check_groups_filter_checks():
     cfg = PreflightConfig(profile="ci")
     args = ArgsStub(profile="ci", check_group=["diff"])
@@ -309,8 +336,8 @@ def test_rule_pack_applies_when_selected():
         _a,
         _b,
         _c,
-        _d,
-        _e,
+        max_diff_files,
+        max_diff_changed_lines,
         _f,
         _g,
         _h,
@@ -321,3 +348,5 @@ def test_rule_pack_applies_when_selected():
     assert strict is True
     assert overrides.get("license_present") == "fail"
     assert overrides.get("diff_object_sizes") == "warn"
+    assert max_diff_files == 200
+    assert max_diff_changed_lines == 3000
