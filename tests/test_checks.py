@@ -22,6 +22,12 @@ def _write(path: Path, rel: str, content: str) -> None:
     full.write_text(content, encoding="utf-8")
 
 
+def _write_bytes(path: Path, rel: str, size: int) -> None:
+    full = path / rel
+    full.parent.mkdir(parents=True, exist_ok=True)
+    full.write_bytes(b"A" * size)
+
+
 def _commit_all(path: Path, msg: str = "commit") -> None:
     _run(["git", "add", "-A"], path)
     _run(["git", "commit", "-m", msg], path)
@@ -62,6 +68,7 @@ def test_happy_path_without_gitleaks(tmp_path: Path):
     assert statuses["gitignore_basics"] == "pass"
     assert statuses["tracked_env_files"] == "pass"
     assert statuses["tracked_keylike_files"] == "pass"
+    assert statuses["tracked_large_files"] == "pass"
 
 
 def test_tracked_env_file_fails(tmp_path: Path):
@@ -120,3 +127,31 @@ def test_unrecognized_branch_warns(tmp_path: Path):
     results = run_checks(repo, check_ids=_full_without_gitleaks())
     status_by_id = {r.id: r.status for r in results}
     assert status_by_id["default_branch_style"] == "warn"
+
+
+def test_large_tracked_file_warns_with_low_threshold(tmp_path: Path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _init_repo(repo)
+    _write_bytes(repo, "assets/big.bin", 4096)
+    _commit_all(repo)
+
+    results = run_checks(repo, check_ids=["tracked_large_files"], max_tracked_file_kib=1)
+    assert len(results) == 1
+    assert results[0].id == "tracked_large_files"
+    assert results[0].status == "warn"
+
+
+def test_severity_override_changes_status(tmp_path: Path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _init_repo(repo)
+    _write(repo, "README.md", "# Demo\n")
+    _commit_all(repo)
+
+    results = run_checks(
+        repo,
+        check_ids=["license_present"],
+        severity_overrides={"license_present": "fail"},
+    )
+    assert results[0].status == "fail"

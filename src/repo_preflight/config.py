@@ -4,16 +4,21 @@ from dataclasses import dataclass, field
 from pathlib import Path
 import tomllib
 
+from .rulepacks import available_rule_packs
+
 
 VALID_PROFILES = {"quick", "full", "ci"}
 VALID_STATUSES = {"pass", "warn", "fail"}
+VALID_RULE_PACKS = set(available_rule_packs())
 
 
 @dataclass
 class PreflightConfig:
     profile: str | None = None
+    rule_pack: str | None = None
     strict: bool | None = None
     no_gitleaks: bool | None = None
+    max_tracked_file_kib: int | None = None
     include: list[str] = field(default_factory=list)
     exclude: list[str] = field(default_factory=list)
     severity_overrides: dict[str, str] = field(default_factory=dict)
@@ -29,6 +34,12 @@ def _as_str(value: object, *, key: str) -> str:
     if isinstance(value, str):
         return value
     raise ValueError(f"Config key '{key}' must be string")
+
+
+def _as_positive_int(value: object, *, key: str) -> int:
+    if isinstance(value, int) and value > 0:
+        return value
+    raise ValueError(f"Config key '{key}' must be a positive integer")
 
 
 def _as_str_list(value: object, *, key: str) -> list[str]:
@@ -55,11 +66,23 @@ def load_config(path: Path) -> PreflightConfig:
                 raise ValueError("preflight.profile must be one of: quick, full, ci")
             cfg.profile = profile
 
+        if "rule_pack" in preflight:
+            rule_pack = _as_str(preflight["rule_pack"], key="preflight.rule_pack")
+            if rule_pack not in VALID_RULE_PACKS:
+                allowed = ", ".join(sorted(VALID_RULE_PACKS))
+                raise ValueError(f"preflight.rule_pack must be one of: {allowed}")
+            cfg.rule_pack = rule_pack
+
         if "strict" in preflight:
             cfg.strict = _as_bool(preflight["strict"], key="preflight.strict")
 
         if "no_gitleaks" in preflight:
             cfg.no_gitleaks = _as_bool(preflight["no_gitleaks"], key="preflight.no_gitleaks")
+
+        if "max_tracked_file_kib" in preflight:
+            cfg.max_tracked_file_kib = _as_positive_int(
+                preflight["max_tracked_file_kib"], key="preflight.max_tracked_file_kib"
+            )
 
     checks = data.get("checks", {})
     if checks:

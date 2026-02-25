@@ -3,8 +3,15 @@
 [preflight]
 # quick | full | ci
 profile = "full"
+
+# Optional rule packs: oss-library | internal-service | cli-tool
+# rule_pack = "oss-library"
+
 strict = false
 no_gitleaks = false
+
+# Warn threshold for tracked file size checks
+max_tracked_file_kib = 5120
 
 [checks]
 # Optional explicit adjustments to profile check list

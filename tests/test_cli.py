@@ -13,10 +13,20 @@ from repo_preflight.config import PreflightConfig
 
 
 class ArgsStub:
-    def __init__(self, *, profile=None, strict=None, gitleaks=None):
+    def __init__(
+        self,
+        *,
+        profile=None,
+        rule_pack=None,
+        strict=None,
+        gitleaks=None,
+        max_file_kib=None,
+    ):
         self.profile = profile
+        self.rule_pack = rule_pack
         self.strict = strict
         self.gitleaks = gitleaks
+        self.max_file_kib = max_file_kib
 
 
 def test_exit_code_priority_default_mode():
@@ -41,12 +51,16 @@ def test_json_payload_fields():
         results,
         strict=True,
         profile="ci",
+        rule_pack="oss-library",
         check_ids=["sample_warn", "sample_pass"],
         config_path="/tmp/repo/.repo-preflight.toml",
+        max_tracked_file_kib=2048,
     )
     assert payload["strict"] is True
     assert payload["profile"] == "ci"
+    assert payload["rule_pack"] == "oss-library"
     assert payload["config_path"] == "/tmp/repo/.repo-preflight.toml"
+    assert payload["max_tracked_file_kib"] == 2048
     assert payload["exit_code"] == 2
     assert payload["summary"] == {"pass": 1, "warn": 1, "fail": 0}
 
@@ -58,11 +72,23 @@ def test_profile_defaults():
 
 
 def test_resolve_runtime_merges_cli_over_config():
-    cfg = PreflightConfig(profile="quick", strict=False, no_gitleaks=True)
-    args = ArgsStub(profile="ci", strict=False, gitleaks=True)
+    cfg = PreflightConfig(profile="quick", strict=False, no_gitleaks=True, max_tracked_file_kib=1024)
+    args = ArgsStub(profile="ci", strict=False, gitleaks=True, max_file_kib=4096)
 
-    profile, strict, gitleaks_enabled, check_ids, _ = resolve_runtime(args, cfg)
+    profile, rule_pack, strict, gitleaks_enabled, check_ids, _overrides, max_file_kib = resolve_runtime(args, cfg)
     assert profile == "ci"
+    assert rule_pack is None
     assert strict is False
     assert gitleaks_enabled is True
     assert "gitleaks_scan" in check_ids
+    assert max_file_kib == 4096
+
+
+def test_rule_pack_applies_when_selected():
+    cfg = PreflightConfig()
+    args = ArgsStub(rule_pack="oss-library")
+
+    _profile, rule_pack, strict, _gitleaks, _checks, overrides, _max_file_kib = resolve_runtime(args, cfg)
+    assert rule_pack == "oss-library"
+    assert strict is True
+    assert overrides.get("license_present") == "fail"

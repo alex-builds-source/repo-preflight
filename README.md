@@ -19,11 +19,14 @@ repo-preflight check
 repo-preflight check --path /path/to/repo
 repo-preflight check --profile quick
 repo-preflight check --profile ci
+repo-preflight check --rule-pack oss-library
 repo-preflight check --strict
 repo-preflight check --gitleaks
 repo-preflight check --no-gitleaks
+repo-preflight check --max-file-kib 2048
 repo-preflight check --json
 repo-preflight list-checks
+repo-preflight list-rule-packs
 ```
 
 ## Profiles
@@ -33,6 +36,14 @@ repo-preflight list-checks
 - `ci`: all checks, strict by default
 
 CLI flags can override profile defaults.
+
+## Rule packs
+
+- `oss-library`: stricter docs/license/security expectations
+- `internal-service`: internal service defaults with strict repo hygiene
+- `cli-tool`: balanced CLI project defaults
+
+Rule packs set policy defaults (severity/strictness) and can still be overridden.
 
 ## Config file (`.repo-preflight.toml`)
 
@@ -44,8 +55,9 @@ Example:
 ```toml
 [preflight]
 profile = "ci"
+rule_pack = "oss-library"
 strict = true
-no_gitleaks = false
+max_tracked_file_kib = 2048
 
 [checks]
 exclude = ["clean_worktree"]
@@ -54,7 +66,7 @@ exclude = ["clean_worktree"]
 license_present = "fail"
 ```
 
-## Checks (v0.1.2)
+## Checks (v0.1.3)
 
 - `git_repository` (fail)
 - `remote_origin` (warn)
@@ -67,6 +79,7 @@ license_present = "fail"
 - `gitignore_basics` (fail/warn)
 - `tracked_env_files` (fail)
 - `tracked_keylike_files` (fail)
+- `tracked_large_files` (warn)
 - `gitleaks_scan` (pass/warn/fail)
 
 Exit codes:

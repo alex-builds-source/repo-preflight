@@ -8,8 +8,10 @@ from repo_preflight.config import load_config
 def test_load_config_defaults_when_missing(tmp_path: Path):
     cfg = load_config(tmp_path / ".repo-preflight.toml")
     assert cfg.profile is None
+    assert cfg.rule_pack is None
     assert cfg.strict is None
     assert cfg.no_gitleaks is None
+    assert cfg.max_tracked_file_kib is None
     assert cfg.include == []
     assert cfg.exclude == []
     assert cfg.severity_overrides == {}
@@ -21,8 +23,10 @@ def test_load_config_with_values(tmp_path: Path):
         """
 [preflight]
 profile = "ci"
+rule_pack = "cli-tool"
 strict = true
 no_gitleaks = false
+max_tracked_file_kib = 2048
 
 [checks]
 include = ["license_present"]
@@ -37,8 +41,10 @@ license_present = "fail"
 
     cfg = load_config(cfg_path)
     assert cfg.profile == "ci"
+    assert cfg.rule_pack == "cli-tool"
     assert cfg.strict is True
     assert cfg.no_gitleaks is False
+    assert cfg.max_tracked_file_kib == 2048
     assert cfg.include == ["license_present"]
     assert cfg.exclude == ["clean_worktree"]
     assert cfg.severity_overrides == {"license_present": "fail"}

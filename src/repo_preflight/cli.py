@@ -6,6 +6,7 @@ from pathlib import Path
 
 from . import __version__
 from .checks import (
+    DEFAULT_MAX_TRACKED_FILE_KIB,
     CheckResult,
     available_check_ids,
     check_ids_for_profile,
@@ -13,6 +14,7 @@ from .checks import (
     validate_check_ids,
 )
 from .config import PreflightConfig, load_config
+from .rulepacks import available_rule_packs, get_rule_pack
 
 
 def summarize(results: list[CheckResult]) -> dict[str, int]:
@@ -49,24 +51,42 @@ def resolve_config_path(target: Path, explicit_config: str | None, no_config: bo
 def resolve_runtime(
     args: argparse.Namespace,
     cfg: PreflightConfig,
-) -> tuple[str, bool, bool, list[str], dict[str, str]]:
+) -> tuple[str, str | None, bool, bool, list[str], dict[str, str], int]:
     profile = args.profile or cfg.profile or "full"
+    rule_pack_name = args.rule_pack or cfg.rule_pack
 
     defaults = profile_defaults(profile)
 
     strict = defaults["strict"]
+    gitleaks_enabled = defaults["gitleaks"]
+
+    check_ids = check_ids_for_profile(profile)
+    severity_overrides: dict[str, str] = {}
+
+    if rule_pack_name is not None:
+        pack = get_rule_pack(rule_pack_name)
+        if pack.strict is not None:
+            strict = pack.strict
+
+        for check_id in pack.include:
+            if check_id not in check_ids:
+                check_ids.append(check_id)
+
+        if pack.exclude:
+            excluded = set(pack.exclude)
+            check_ids = [check_id for check_id in check_ids if check_id not in excluded]
+
+        severity_overrides.update(pack.severity_overrides)
+
     if cfg.strict is not None:
         strict = cfg.strict
     if args.strict is not None:
         strict = args.strict
 
-    gitleaks_enabled = defaults["gitleaks"]
     if cfg.no_gitleaks is not None:
         gitleaks_enabled = not cfg.no_gitleaks
     if args.gitleaks is not None:
         gitleaks_enabled = args.gitleaks
-
-    check_ids = check_ids_for_profile(profile)
 
     if cfg.include:
         for check_id in cfg.include:
@@ -77,22 +97,49 @@ def resolve_runtime(
         excluded = set(cfg.exclude)
         check_ids = [check_id for check_id in check_ids if check_id not in excluded]
 
+    max_tracked_file_kib = cfg.max_tracked_file_kib or DEFAULT_MAX_TRACKED_FILE_KIB
+    if args.max_file_kib is not None:
+        max_tracked_file_kib = args.max_file_kib
+
+    if max_tracked_file_kib <= 0:
+        raise ValueError("max tracked file size must be > 0 KiB")
+
     if not gitleaks_enabled:
         check_ids = [check_id for check_id in check_ids if check_id != "gitleaks_scan"]
+
+    severity_overrides.update(cfg.severity_overrides)
 
     unknown = validate_check_ids(check_ids)
     if unknown:
         unknown_s = ", ".join(unknown)
         raise ValueError(f"Unknown check ids in resolved config: {unknown_s}")
 
-    if validate_check_ids(list(cfg.severity_overrides.keys())):
-        unknown_overrides = ", ".join(validate_check_ids(list(cfg.severity_overrides.keys())))
-        raise ValueError(f"Unknown check ids in severity_overrides: {unknown_overrides}")
+    unknown_overrides = validate_check_ids(list(severity_overrides.keys()))
+    if unknown_overrides:
+        unknown_s = ", ".join(unknown_overrides)
+        raise ValueError(f"Unknown check ids in severity_overrides: {unknown_s}")
 
-    return profile, strict, gitleaks_enabled, check_ids, cfg.severity_overrides
+    return (
+        profile,
+        rule_pack_name,
+        strict,
+        gitleaks_enabled,
+        check_ids,
+        severity_overrides,
+        max_tracked_file_kib,
+    )
 
 
-def print_human(path: Path, results: list[CheckResult], *, strict: bool, profile: str, check_ids: list[str]) -> None:
+def print_human(
+    path: Path,
+    results: list[CheckResult],
+    *,
+    strict: bool,
+    profile: str,
+    rule_pack: str | None,
+    check_ids: list[str],
+    max_tracked_file_kib: int,
+) -> None:
     summary = summarize(results)
     code = exit_code(summary, strict=strict)
     overall = "FAIL" if code == 2 else ("WARN" if summary["warn"] else "PASS")
@@ -101,7 +148,9 @@ def print_human(path: Path, results: list[CheckResult], *, strict: bool, profile
     )
     print(f"path: {path}")
     print(f"profile: {profile}")
+    print(f"rule_pack: {rule_pack or 'none'}")
     print(f"mode: {'strict' if strict else 'default'}")
+    print(f"max_tracked_file_kib: {max_tracked_file_kib}")
     print(f"checks: {', '.join(check_ids)}")
 
     for r in results:
@@ -117,15 +166,19 @@ def build_payload(
     *,
     strict: bool,
     profile: str,
+    rule_pack: str | None,
     check_ids: list[str],
     config_path: str | None,
+    max_tracked_file_kib: int,
 ) -> dict:
     summary = summarize(results)
     return {
         "path": str(path),
         "profile": profile,
+        "rule_pack": rule_pack,
         "strict": strict,
         "config_path": config_path,
+        "max_tracked_file_kib": max_tracked_file_kib,
         "check_ids": check_ids,
         "summary": summary,
         "exit_code": exit_code(summary, strict=strict),
@@ -139,8 +192,10 @@ def print_json(
     *,
     strict: bool,
     profile: str,
+    rule_pack: str | None,
     check_ids: list[str],
     config_path: str | None,
+    max_tracked_file_kib: int,
 ) -> None:
     print(
         json.dumps(
@@ -149,8 +204,10 @@ def print_json(
                 results,
                 strict=strict,
                 profile=profile,
+                rule_pack=rule_pack,
                 check_ids=check_ids,
                 config_path=config_path,
+                max_tracked_file_kib=max_tracked_file_kib,
             ),
             indent=2,
         )
@@ -166,8 +223,21 @@ def cmd_check(args: argparse.Namespace) -> int:
     config_path = resolve_config_path(target, args.config, args.no_config)
     try:
         cfg = load_config(config_path) if config_path is not None else PreflightConfig()
-        profile, strict, _gitleaks_enabled, check_ids, severity_overrides = resolve_runtime(args, cfg)
-        results = run_checks(target, check_ids=check_ids, severity_overrides=severity_overrides)
+        (
+            profile,
+            rule_pack,
+            strict,
+            _gitleaks_enabled,
+            check_ids,
+            severity_overrides,
+            max_tracked_file_kib,
+        ) = resolve_runtime(args, cfg)
+        results = run_checks(
+            target,
+            check_ids=check_ids,
+            severity_overrides=severity_overrides,
+            max_tracked_file_kib=max_tracked_file_kib,
+        )
     except ValueError as err:
         print(f"Error: {err}")
         return 2
@@ -180,11 +250,21 @@ def cmd_check(args: argparse.Namespace) -> int:
             results,
             strict=strict,
             profile=profile,
+            rule_pack=rule_pack,
             check_ids=check_ids,
             config_path=config_path_str,
+            max_tracked_file_kib=max_tracked_file_kib,
         )
     else:
-        print_human(target, results, strict=strict, profile=profile, check_ids=check_ids)
+        print_human(
+            target,
+            results,
+            strict=strict,
+            profile=profile,
+            rule_pack=rule_pack,
+            check_ids=check_ids,
+            max_tracked_file_kib=max_tracked_file_kib,
+        )
 
     return exit_code(summarize(results), strict=strict)
 
@@ -192,6 +272,13 @@ def cmd_check(args: argparse.Namespace) -> int:
 def cmd_list_checks(_: argparse.Namespace) -> int:
     for check_id in available_check_ids():
         print(check_id)
+    return 0
+
+
+def cmd_list_rule_packs(_: argparse.Namespace) -> int:
+    for name in available_rule_packs():
+        pack = get_rule_pack(name)
+        print(f"{name}: {pack.description}")
     return 0
 
 
@@ -206,6 +293,11 @@ def build_parser() -> argparse.ArgumentParser:
     check.add_argument("--json", action="store_true", help="Emit machine-readable JSON output")
     check.add_argument("--profile", choices=["quick", "full", "ci"], help="Check profile")
     check.add_argument(
+        "--rule-pack",
+        choices=available_rule_packs(),
+        help="Apply a rule pack for project-specific policy defaults",
+    )
+    check.add_argument(
         "--strict",
         dest="strict",
         action=argparse.BooleanOptionalAction,
@@ -219,12 +311,20 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Enable/disable gitleaks check",
     )
+    check.add_argument(
+        "--max-file-kib",
+        type=int,
+        help=f"Warn threshold for tracked large files in KiB (default: {DEFAULT_MAX_TRACKED_FILE_KIB})",
+    )
     check.add_argument("--config", help="Path to config file (default: <path>/.repo-preflight.toml)")
     check.add_argument("--no-config", action="store_true", help="Ignore local config file")
     check.set_defaults(func=cmd_check)
 
     list_checks = sub.add_parser("list-checks", help="List available check ids")
     list_checks.set_defaults(func=cmd_list_checks)
+
+    list_rule_packs = sub.add_parser("list-rule-packs", help="List available rule packs")
+    list_rule_packs.set_defaults(func=cmd_list_rule_packs)
 
     return parser
 

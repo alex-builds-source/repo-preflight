@@ -7,6 +7,7 @@ from pathlib import Path
 
 
 VALID_STATUSES = {"pass", "warn", "fail"}
+DEFAULT_MAX_TRACKED_FILE_KIB = 5120  # 5 MiB
 
 
 @dataclass
@@ -269,6 +270,43 @@ def check_tracked_keylike_files(path: Path) -> CheckResult:
     )
 
 
+def check_tracked_large_files(path: Path, *, max_file_kib: int = DEFAULT_MAX_TRACKED_FILE_KIB) -> CheckResult:
+    if not _is_git_repo(path):
+        return CheckResult(
+            "tracked_large_files",
+            "warn",
+            "Not a git repository; skipped tracked large-file check",
+            "Initialize git and re-run checks.",
+        )
+
+    threshold_bytes = max_file_kib * 1024
+    tracked = _tracked_files(path)
+    oversized: list[tuple[str, int]] = []
+    for rel in tracked:
+        p = path / rel
+        if not p.exists() or not p.is_file():
+            continue
+        try:
+            size = p.stat().st_size
+        except OSError:
+            continue
+        if size > threshold_bytes:
+            oversized.append((rel, size))
+
+    if not oversized:
+        return CheckResult("tracked_large_files", "pass", f"No tracked files above {max_file_kib} KiB")
+
+    oversized.sort(key=lambda x: x[1], reverse=True)
+    preview = ", ".join(f"{name} ({size // 1024} KiB)" for name, size in oversized[:5])
+    more = "" if len(oversized) <= 5 else f" (+{len(oversized) - 5} more)"
+    return CheckResult(
+        "tracked_large_files",
+        "warn",
+        f"Tracked files exceed {max_file_kib} KiB: {preview}{more}",
+        "Use Git LFS or external artifact storage for large assets where appropriate.",
+    )
+
+
 def check_gitleaks(path: Path) -> CheckResult:
     if not _is_git_repo(path):
         return CheckResult(
@@ -318,6 +356,7 @@ CHECK_REGISTRY = {
     "gitignore_basics": check_gitignore_secrets,
     "tracked_env_files": check_tracked_env,
     "tracked_keylike_files": check_tracked_keylike_files,
+    "tracked_large_files": check_tracked_large_files,
     "gitleaks_scan": check_gitleaks,
 }
 
@@ -368,6 +407,7 @@ def run_checks(
     *,
     check_ids: list[str],
     severity_overrides: dict[str, str] | None = None,
+    max_tracked_file_kib: int = DEFAULT_MAX_TRACKED_FILE_KIB,
 ) -> list[CheckResult]:
     unknown = validate_check_ids(check_ids)
     if unknown:
@@ -377,9 +417,14 @@ def run_checks(
     severity_overrides = severity_overrides or {}
     results: list[CheckResult] = []
     for check_id in check_ids:
-        result = CHECK_REGISTRY[check_id](path)
+        if check_id == "tracked_large_files":
+            result = check_tracked_large_files(path, max_file_kib=max_tracked_file_kib)
+        else:
+            result = CHECK_REGISTRY[check_id](path)
+
         if check_id in severity_overrides:
             result = _apply_status_override(result, severity_overrides[check_id])
+
         results.append(result)
 
     return results

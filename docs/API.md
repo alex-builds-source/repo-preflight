@@ -5,17 +5,20 @@
 ## Machine-readable interface
 
 ### Commands
-- `repo-preflight check --json --path <repo> [--profile <quick|full|ci>] [--strict|--no-strict] [--gitleaks|--no-gitleaks] [--config <path>] [--no-config]`
+- `repo-preflight check --json --path <repo> [--profile <quick|full|ci>] [--rule-pack <name>] [--strict|--no-strict] [--gitleaks|--no-gitleaks] [--max-file-kib <int>] [--config <path>] [--no-config]`
 - `repo-preflight list-checks`
+- `repo-preflight list-rule-packs`
 
-### Output schema (v0.1.2)
+### Output schema (v0.1.3)
 
 ```json
 {
   "path": "/abs/path",
   "profile": "ci",
+  "rule_pack": "oss-library",
   "strict": true,
   "config_path": "/abs/path/.repo-preflight.toml",
+  "max_tracked_file_kib": 2048,
   "check_ids": ["readme_present", "tracked_env_files"],
   "summary": { "pass": 0, "warn": 0, "fail": 0 },
   "exit_code": 0,

@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.3] - 2026-02-25
+### Added
+- Rule packs: `oss-library`, `internal-service`, `cli-tool`.
+- Large binary hygiene check: `tracked_large_files` with configurable threshold.
+- `list-rule-packs` command.
+- Config support for `preflight.rule_pack` and `preflight.max_tracked_file_kib`.
+
+### Changed
+- Runtime policy resolution now merges: profile defaults + rule pack + config + CLI overrides.
+- JSON payload now includes `rule_pack` and `max_tracked_file_kib`.
+- Expanded tests for rule packs, config fields, and large-file behavior.
+
 ## [0.1.2] - 2026-02-25
 ### Added
 - Check profiles: `quick`, `full`, `ci`.
