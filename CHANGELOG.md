@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.8] - 2026-02-25
+### Added
+- Diff object-size check: `diff_object_sizes`.
+- Diff object-size controls:
+  - `--max-diff-object-kib`
+  - `preflight.max_diff_object_kib`
+
+### Changed
+- Rule-pack diff defaults expanded to include `diff_patch_size`, `diff_large_files`, and `diff_object_sizes` severities.
+- JSON output now includes `max_diff_object_kib`.
+- Expanded tests for diff object-size checks and updated runtime/config coverage.
+
 ## [0.1.7] - 2026-02-25
 ### Added
 - Diff-depth threshold check: `diff_patch_size`.

@@ -13,6 +13,7 @@ DEFAULT_HISTORY_OBJECT_LIMIT = 20000
 DEFAULT_DIFF_TARGET = "HEAD"
 DEFAULT_MAX_DIFF_FILES = 200
 DEFAULT_MAX_DIFF_CHANGED_LINES = 4000
+DEFAULT_MAX_DIFF_OBJECT_KIB = 5120  # 5 MiB
 
 
 @dataclass
@@ -81,6 +82,18 @@ def _diff_numstat(path: Path, *, diff_base: str | None, diff_target: str) -> tup
         out.append((file_path, added, deleted))
 
     return out, None
+
+
+def _blob_size_at_ref(path: Path, *, ref: str, file_path: str) -> tuple[int | None, str | None]:
+    proc = _run(["git", "cat-file", "-s", f"{ref}:{file_path}"], path)
+    if proc.returncode != 0:
+        err = proc.stderr.strip() or proc.stdout.strip() or "blob missing at ref"
+        return None, err
+
+    try:
+        return int(proc.stdout.strip()), None
+    except ValueError:
+        return None, "invalid blob size response"
 
 
 def check_git_repository(path: Path) -> CheckResult:
@@ -561,6 +574,72 @@ def check_diff_large_files(
     )
 
 
+def check_diff_object_sizes(
+    path: Path,
+    *,
+    diff_base: str | None = None,
+    diff_target: str = DEFAULT_DIFF_TARGET,
+    max_object_kib: int = DEFAULT_MAX_DIFF_OBJECT_KIB,
+) -> CheckResult:
+    if not _is_git_repo(path):
+        return CheckResult(
+            "diff_object_sizes",
+            "warn",
+            "Not a git repository; skipped diff object-size check",
+            "Initialize git and re-run checks.",
+        )
+
+    if not diff_base:
+        return CheckResult(
+            "diff_object_sizes",
+            "pass",
+            "No diff base configured; diff-aware checks skipped",
+        )
+
+    changed, err = _diff_changed_files(path, diff_base=diff_base, diff_target=diff_target)
+    if err is not None:
+        return CheckResult(
+            "diff_object_sizes",
+            "warn",
+            f"Could not compute diff for {diff_base}...{diff_target}: {err}",
+            "Verify refs exist locally (e.g., fetch origin) and re-run.",
+        )
+
+    if not changed:
+        return CheckResult(
+            "diff_object_sizes",
+            "pass",
+            f"No changed files between {diff_base}...{diff_target}",
+        )
+
+    threshold = max_object_kib * 1024
+    oversized: list[tuple[str, int]] = []
+    for rel in changed:
+        size, size_err = _blob_size_at_ref(path, ref=diff_target, file_path=rel)
+        if size_err is not None or size is None:
+            # deleted/moved paths may not exist at target ref; ignore those here
+            continue
+        if size > threshold:
+            oversized.append((rel, size))
+
+    if not oversized:
+        return CheckResult(
+            "diff_object_sizes",
+            "pass",
+            f"No changed blob objects above {max_object_kib} KiB in {diff_base}...{diff_target}",
+        )
+
+    oversized.sort(key=lambda x: x[1], reverse=True)
+    preview = ", ".join(f"{name} ({size // 1024} KiB)" for name, size in oversized[:5])
+    more = "" if len(oversized) <= 5 else f" (+{len(oversized) - 5} more)"
+    return CheckResult(
+        "diff_object_sizes",
+        "warn",
+        f"Changed blob objects exceed {max_object_kib} KiB in {diff_base}...{diff_target}: {preview}{more}",
+        "Consider Git LFS or artifact storage for large changed binary assets.",
+    )
+
+
 def check_diff_patch_size(
     path: Path,
     *,
@@ -681,6 +760,7 @@ CHECK_REGISTRY = {
     "history_large_blobs": check_history_large_blobs,
     "diff_changed_files": check_diff_changed_files,
     "diff_large_files": check_diff_large_files,
+    "diff_object_sizes": check_diff_object_sizes,
     "diff_patch_size": check_diff_patch_size,
     "gitleaks_scan": check_gitleaks,
 }
@@ -739,6 +819,7 @@ def run_checks(
     diff_target: str = DEFAULT_DIFF_TARGET,
     max_diff_files: int = DEFAULT_MAX_DIFF_FILES,
     max_diff_changed_lines: int = DEFAULT_MAX_DIFF_CHANGED_LINES,
+    max_diff_object_kib: int = DEFAULT_MAX_DIFF_OBJECT_KIB,
 ) -> list[CheckResult]:
     unknown = validate_check_ids(check_ids)
     if unknown:
@@ -764,6 +845,13 @@ def run_checks(
                 diff_base=diff_base,
                 diff_target=diff_target,
                 max_file_kib=max_tracked_file_kib,
+            )
+        elif check_id == "diff_object_sizes":
+            result = check_diff_object_sizes(
+                path,
+                diff_base=diff_base,
+                diff_target=diff_target,
+                max_object_kib=max_diff_object_kib,
             )
         elif check_id == "diff_patch_size":
             result = check_diff_patch_size(

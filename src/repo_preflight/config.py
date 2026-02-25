@@ -28,6 +28,7 @@ class PreflightConfig:
     history_object_limit: int | None = None
     max_diff_files: int | None = None
     max_diff_changed_lines: int | None = None
+    max_diff_object_kib: int | None = None
     include: list[str] = field(default_factory=list)
     exclude: list[str] = field(default_factory=list)
     severity_overrides: dict[str, str] = field(default_factory=dict)
@@ -126,6 +127,11 @@ def load_config(path: Path) -> PreflightConfig:
         if "max_diff_changed_lines" in preflight:
             cfg.max_diff_changed_lines = _as_positive_int(
                 preflight["max_diff_changed_lines"], key="preflight.max_diff_changed_lines"
+            )
+
+        if "max_diff_object_kib" in preflight:
+            cfg.max_diff_object_kib = _as_positive_int(
+                preflight["max_diff_object_kib"], key="preflight.max_diff_object_kib"
             )
 
     checks = data.get("checks", {})

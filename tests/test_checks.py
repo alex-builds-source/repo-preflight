@@ -70,6 +70,7 @@ def test_happy_path_without_gitleaks(tmp_path: Path):
     assert statuses["tracked_keylike_files"] == "pass"
     assert statuses["tracked_large_files"] == "pass"
     assert statuses["history_large_blobs"] == "pass"
+    assert statuses["diff_object_sizes"] == "pass"
     assert statuses["diff_patch_size"] == "pass"
 
 
@@ -171,6 +172,28 @@ def test_diff_patch_size_warns_for_big_change(tmp_path: Path):
         max_diff_changed_lines=50,
     )
     assert results[0].id == "diff_patch_size"
+    assert results[0].status == "warn"
+
+
+def test_diff_object_sizes_warn_for_large_changed_blob(tmp_path: Path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _init_repo(repo)
+    _write(repo, "README.md", "# Demo\n")
+    _commit_all(repo, "base")
+
+    _run(["git", "checkout", "-b", "feature/blob"], repo)
+    _write_bytes(repo, "assets/new-large.bin", 4096)
+    _commit_all(repo, "add large object")
+
+    results = run_checks(
+        repo,
+        check_ids=["diff_object_sizes"],
+        diff_base="main",
+        diff_target="HEAD",
+        max_diff_object_kib=1,
+    )
+    assert results[0].id == "diff_object_sizes"
     assert results[0].status == "warn"
 
 

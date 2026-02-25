@@ -27,6 +27,7 @@ max_history_blob_kib = 5120
 # Diff-depth thresholds
 max_diff_files = 200
 max_diff_changed_lines = 4000
+max_diff_object_kib = 5120
 
 # Maximum history objects scanned by history_large_blobs
 history_object_limit = 20000

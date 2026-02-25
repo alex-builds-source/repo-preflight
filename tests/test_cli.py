@@ -28,6 +28,7 @@ class ArgsStub:
         history_object_limit=None,
         max_diff_files=None,
         max_diff_changed_lines=None,
+        max_diff_object_kib=None,
         diff_mode=None,
         pr_base_ref=None,
         diff_base=None,
@@ -42,6 +43,7 @@ class ArgsStub:
         self.history_object_limit = history_object_limit
         self.max_diff_files = max_diff_files
         self.max_diff_changed_lines = max_diff_changed_lines
+        self.max_diff_object_kib = max_diff_object_kib
         self.diff_mode = diff_mode
         self.pr_base_ref = pr_base_ref
         self.diff_base = diff_base
@@ -78,6 +80,7 @@ def test_json_payload_fields():
         history_object_limit=15000,
         max_diff_files=222,
         max_diff_changed_lines=3333,
+        max_diff_object_kib=4444,
         diff_mode="pr",
         pr_base_ref="origin/main",
         diff_base="origin/main",
@@ -88,6 +91,7 @@ def test_json_payload_fields():
     assert payload["rule_pack"] == "oss-library"
     assert payload["max_diff_files"] == 222
     assert payload["max_diff_changed_lines"] == 3333
+    assert payload["max_diff_object_kib"] == 4444
     assert payload["diff_mode"] == "pr"
     assert payload["pr_base_ref"] == "origin/main"
     assert payload["diff_base"] == "origin/main"
@@ -137,6 +141,7 @@ def test_policy_doc_contains_effective_settings():
         history_object_limit=15000,
         max_diff_files=200,
         max_diff_changed_lines=4000,
+        max_diff_object_kib=5120,
         check_ids=["readme_present", "gitleaks_scan"],
         severity_overrides={"license_present": "fail"},
         config_path="/tmp/repo/.repo-preflight.toml",
@@ -144,6 +149,7 @@ def test_policy_doc_contains_effective_settings():
     assert "# repo-preflight policy" in doc
     assert "Profile: `ci`" in doc
     assert "Max diff files: `200`" in doc
+    assert "Max diff object size: `5120 KiB`" in doc
     assert "`license_present` -> `fail`" in doc
 
 
@@ -152,6 +158,7 @@ def test_policy_template_contains_rule_pack_defaults():
     assert 'rule_pack = "oss-library"' in template
     assert 'diff_mode = "pr"' in template
     assert 'license_present = "fail"' in template
+    assert 'diff_object_sizes = "warn"' in template
 
 
 def test_profile_defaults():
@@ -174,6 +181,7 @@ def test_resolve_runtime_merges_cli_over_config():
         history_object_limit=6000,
         max_diff_files=50,
         max_diff_changed_lines=500,
+        max_diff_object_kib=600,
     )
     args = ArgsStub(
         profile="ci",
@@ -184,6 +192,7 @@ def test_resolve_runtime_merges_cli_over_config():
         history_object_limit=1000,
         max_diff_files=100,
         max_diff_changed_lines=999,
+        max_diff_object_kib=1000,
         diff_mode="manual",
         pr_base_ref="origin/develop",
         diff_base="origin/develop",
@@ -202,6 +211,7 @@ def test_resolve_runtime_merges_cli_over_config():
         history_limit,
         max_diff_files,
         max_diff_changed_lines,
+        max_diff_object_kib,
         diff_mode,
         pr_base_ref,
         diff_base,
@@ -217,6 +227,7 @@ def test_resolve_runtime_merges_cli_over_config():
     assert history_limit == 1000
     assert max_diff_files == 100
     assert max_diff_changed_lines == 999
+    assert max_diff_object_kib == 1000
     assert diff_mode == "manual"
     assert pr_base_ref == "origin/develop"
     assert diff_base == "origin/develop"
@@ -242,6 +253,7 @@ def test_resolve_runtime_pr_mode_uses_ci_env(monkeypatch):
         _history_limit,
         _max_diff_files,
         _max_diff_changed_lines,
+        _max_diff_object_kib,
         diff_mode,
         _pr_base_ref,
         diff_base,
@@ -273,7 +285,9 @@ def test_rule_pack_applies_when_selected():
         _g,
         _h,
         _i,
+        _j,
     ) = resolve_runtime(args, cfg)
     assert rule_pack == "oss-library"
     assert strict is True
     assert overrides.get("license_present") == "fail"
+    assert overrides.get("diff_object_sizes") == "warn"

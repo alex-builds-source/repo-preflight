@@ -28,7 +28,7 @@ repo-preflight check --no-gitleaks
 repo-preflight check --max-file-kib 2048
 repo-preflight check --max-history-kib 2048
 repo-preflight check --history-object-limit 5000
-repo-preflight check --max-diff-files 200 --max-diff-changed-lines 4000
+repo-preflight check --max-diff-files 200 --max-diff-changed-lines 4000 --max-diff-object-kib 5120
 repo-preflight check --diff-mode pr --pr-base-ref origin/main
 repo-preflight check --diff-base origin/main --diff-target HEAD
 repo-preflight check --json
@@ -51,7 +51,7 @@ CLI flags can override profile defaults.
 ## Rule packs
 
 - `oss-library`: stricter docs/license/security expectations
-- `internal-service`: internal service defaults with strict repo hygiene
+- `internal-service`: internal service defaults with strict repo hygiene and strict diff severity
 - `cli-tool`: balanced CLI project defaults
 
 Rule packs set policy defaults and can still be overridden by config/CLI.
@@ -62,6 +62,7 @@ When a diff base is available (`--diff-base` or `--diff-mode pr`), preflight eva
 
 - `diff_changed_files`
 - `diff_large_files`
+- `diff_object_sizes`
 - `diff_patch_size`
 
 `--diff-mode pr` is CI-friendly and auto-resolves refs from PR/MR env vars with fallback base ref.
@@ -85,6 +86,7 @@ max_tracked_file_kib = 2048
 max_history_blob_kib = 2048
 max_diff_files = 200
 max_diff_changed_lines = 4000
+max_diff_object_kib = 5120
 history_object_limit = 10000
 
 [checks]
@@ -94,7 +96,7 @@ exclude = ["clean_worktree"]
 license_present = "fail"
 ```
 
-## Checks (v0.1.7)
+## Checks (v0.1.8)
 
 - `git_repository` (fail)
 - `remote_origin` (warn)
@@ -111,6 +113,7 @@ license_present = "fail"
 - `history_large_blobs` (warn)
 - `diff_changed_files` (pass/warn)
 - `diff_large_files` (pass/warn)
+- `diff_object_sizes` (pass/warn)
 - `diff_patch_size` (pass/warn)
 - `gitleaks_scan` (pass/warn/fail)
 

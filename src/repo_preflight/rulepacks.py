@@ -22,6 +22,9 @@ RULE_PACKS: dict[str, RulePack] = {
             "license_present": "fail",
             "license_identifier": "fail",
             "security_policy_present": "fail",
+            "diff_patch_size": "warn",
+            "diff_large_files": "warn",
+            "diff_object_sizes": "warn",
         },
     ),
     "internal-service": RulePack(
@@ -33,6 +36,9 @@ RULE_PACKS: dict[str, RulePack] = {
             "license_present": "pass",
             "license_identifier": "pass",
             "security_policy_present": "warn",
+            "diff_patch_size": "fail",
+            "diff_large_files": "fail",
+            "diff_object_sizes": "fail",
         },
     ),
     "cli-tool": RulePack(
@@ -43,6 +49,9 @@ RULE_PACKS: dict[str, RulePack] = {
             "license_present": "fail",
             "license_identifier": "warn",
             "security_policy_present": "warn",
+            "diff_patch_size": "warn",
+            "diff_large_files": "warn",
+            "diff_object_sizes": "warn",
         },
     ),
 }

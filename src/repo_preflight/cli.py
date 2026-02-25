@@ -11,6 +11,7 @@ from .checks import (
     DEFAULT_HISTORY_OBJECT_LIMIT,
     DEFAULT_MAX_DIFF_CHANGED_LINES,
     DEFAULT_MAX_DIFF_FILES,
+    DEFAULT_MAX_DIFF_OBJECT_KIB,
     DEFAULT_MAX_HISTORY_BLOB_KIB,
     DEFAULT_MAX_TRACKED_FILE_KIB,
     CheckResult,
@@ -110,6 +111,7 @@ def resolve_runtime(
     int,
     int,
     int,
+    int,
     str,
     str,
     str | None,
@@ -180,6 +182,10 @@ def resolve_runtime(
     if args.max_diff_changed_lines is not None:
         max_diff_changed_lines = args.max_diff_changed_lines
 
+    max_diff_object_kib = cfg.max_diff_object_kib or DEFAULT_MAX_DIFF_OBJECT_KIB
+    if args.max_diff_object_kib is not None:
+        max_diff_object_kib = args.max_diff_object_kib
+
     diff_mode = args.diff_mode or cfg.diff_mode or "manual"
     pr_base_ref = args.pr_base_ref or cfg.pr_base_ref or DEFAULT_PR_BASE_REF
 
@@ -203,6 +209,8 @@ def resolve_runtime(
         raise ValueError("max diff files must be > 0")
     if max_diff_changed_lines <= 0:
         raise ValueError("max diff changed lines must be > 0")
+    if max_diff_object_kib <= 0:
+        raise ValueError("max diff object size must be > 0 KiB")
 
     if not gitleaks_enabled:
         check_ids = [check_id for check_id in check_ids if check_id != "gitleaks_scan"]
@@ -231,6 +239,7 @@ def resolve_runtime(
         history_object_limit,
         max_diff_files,
         max_diff_changed_lines,
+        max_diff_object_kib,
         diff_mode,
         pr_base_ref,
         diff_base,
@@ -251,6 +260,7 @@ def print_human(
     history_object_limit: int,
     max_diff_files: int,
     max_diff_changed_lines: int,
+    max_diff_object_kib: int,
     diff_mode: str,
     pr_base_ref: str,
     diff_base: str | None,
@@ -274,6 +284,7 @@ def print_human(
     print(f"history_object_limit: {history_object_limit}")
     print(f"max_diff_files: {max_diff_files}")
     print(f"max_diff_changed_lines: {max_diff_changed_lines}")
+    print(f"max_diff_object_kib: {max_diff_object_kib}")
     print(f"diff_base: {diff_base or 'none'}")
     print(f"diff_target: {diff_target}")
     print(f"checks: {', '.join(check_ids)}")
@@ -325,6 +336,7 @@ def build_payload(
     history_object_limit: int,
     max_diff_files: int,
     max_diff_changed_lines: int,
+    max_diff_object_kib: int,
     diff_mode: str,
     pr_base_ref: str,
     diff_base: str | None,
@@ -342,6 +354,7 @@ def build_payload(
         "history_object_limit": history_object_limit,
         "max_diff_files": max_diff_files,
         "max_diff_changed_lines": max_diff_changed_lines,
+        "max_diff_object_kib": max_diff_object_kib,
         "diff_mode": diff_mode,
         "pr_base_ref": pr_base_ref,
         "diff_base": diff_base,
@@ -452,6 +465,7 @@ def build_policy_doc(
     history_object_limit: int,
     max_diff_files: int,
     max_diff_changed_lines: int,
+    max_diff_object_kib: int,
     check_ids: list[str],
     severity_overrides: dict[str, str],
     config_path: str | None,
@@ -472,6 +486,7 @@ def build_policy_doc(
         f"- History object limit: `{history_object_limit}`",
         f"- Max diff files: `{max_diff_files}`",
         f"- Max diff changed lines: `{max_diff_changed_lines}`",
+        f"- Max diff object size: `{max_diff_object_kib} KiB`",
         f"- Config path: `{config_path or 'none'}`",
         "",
         "## Active checks",
@@ -512,6 +527,7 @@ def build_policy_template(*, rule_pack_name: str, profile: str, strict: bool | N
         "history_object_limit = 20000",
         "max_diff_files = 200",
         "max_diff_changed_lines = 4000",
+        "max_diff_object_kib = 5120",
         "",
         "[checks]",
         "include = []",
@@ -554,6 +570,7 @@ def cmd_check(args: argparse.Namespace) -> int:
             history_object_limit,
             max_diff_files,
             max_diff_changed_lines,
+            max_diff_object_kib,
             diff_mode,
             pr_base_ref,
             diff_base,
@@ -570,6 +587,7 @@ def cmd_check(args: argparse.Namespace) -> int:
             diff_target=diff_target,
             max_diff_files=max_diff_files,
             max_diff_changed_lines=max_diff_changed_lines,
+            max_diff_object_kib=max_diff_object_kib,
         )
     except ValueError as err:
         print(f"Error: {err}")
@@ -589,6 +607,7 @@ def cmd_check(args: argparse.Namespace) -> int:
         history_object_limit=history_object_limit,
         max_diff_files=max_diff_files,
         max_diff_changed_lines=max_diff_changed_lines,
+        max_diff_object_kib=max_diff_object_kib,
         diff_mode=diff_mode,
         pr_base_ref=pr_base_ref,
         diff_base=diff_base,
@@ -637,6 +656,7 @@ def cmd_check(args: argparse.Namespace) -> int:
             history_object_limit=history_object_limit,
             max_diff_files=max_diff_files,
             max_diff_changed_lines=max_diff_changed_lines,
+            max_diff_object_kib=max_diff_object_kib,
             diff_mode=diff_mode,
             pr_base_ref=pr_base_ref,
             diff_base=diff_base,
@@ -667,6 +687,7 @@ def cmd_policy_doc(args: argparse.Namespace) -> int:
             history_object_limit,
             max_diff_files,
             max_diff_changed_lines,
+            max_diff_object_kib,
             diff_mode,
             pr_base_ref,
             diff_base,
@@ -692,6 +713,7 @@ def cmd_policy_doc(args: argparse.Namespace) -> int:
         history_object_limit=history_object_limit,
         max_diff_files=max_diff_files,
         max_diff_changed_lines=max_diff_changed_lines,
+        max_diff_object_kib=max_diff_object_kib,
         check_ids=check_ids,
         severity_overrides=severity_overrides,
         config_path=config_path_str,
@@ -780,6 +802,11 @@ def _add_common_policy_args(parser: argparse.ArgumentParser) -> None:
         "--max-diff-changed-lines",
         type=int,
         help=f"Warn threshold for total changed lines in diff mode (default: {DEFAULT_MAX_DIFF_CHANGED_LINES})",
+    )
+    parser.add_argument(
+        "--max-diff-object-kib",
+        type=int,
+        help=f"Warn threshold for changed object blob sizes in diff mode (default: {DEFAULT_MAX_DIFF_OBJECT_KIB})",
     )
     parser.add_argument(
         "--diff-mode",
