@@ -10,6 +10,7 @@ from .rulepacks import available_rule_packs
 VALID_PROFILES = {"quick", "full", "ci"}
 VALID_STATUSES = {"pass", "warn", "fail"}
 VALID_RULE_PACKS = set(available_rule_packs())
+VALID_DIFF_MODES = {"manual", "pr"}
 
 
 @dataclass
@@ -18,6 +19,8 @@ class PreflightConfig:
     rule_pack: str | None = None
     strict: bool | None = None
     no_gitleaks: bool | None = None
+    diff_mode: str | None = None
+    pr_base_ref: str | None = None
     diff_base: str | None = None
     diff_target: str | None = None
     max_tracked_file_kib: int | None = None
@@ -82,6 +85,15 @@ def load_config(path: Path) -> PreflightConfig:
 
         if "no_gitleaks" in preflight:
             cfg.no_gitleaks = _as_bool(preflight["no_gitleaks"], key="preflight.no_gitleaks")
+
+        if "diff_mode" in preflight:
+            diff_mode = _as_str(preflight["diff_mode"], key="preflight.diff_mode")
+            if diff_mode not in VALID_DIFF_MODES:
+                raise ValueError("preflight.diff_mode must be one of: manual, pr")
+            cfg.diff_mode = diff_mode
+
+        if "pr_base_ref" in preflight:
+            cfg.pr_base_ref = _as_str(preflight["pr_base_ref"], key="preflight.pr_base_ref")
 
         if "diff_base" in preflight:
             cfg.diff_base = _as_str(preflight["diff_base"], key="preflight.diff_base")

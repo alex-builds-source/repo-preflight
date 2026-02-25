@@ -4,6 +4,7 @@ from pathlib import Path
 
 from repo_preflight.cli import (
     build_payload,
+    build_policy_doc,
     build_sarif_payload,
     exit_code,
     profile_defaults,
@@ -24,6 +25,8 @@ class ArgsStub:
         max_file_kib=None,
         max_history_kib=None,
         history_object_limit=None,
+        diff_mode=None,
+        pr_base_ref=None,
         diff_base=None,
         diff_target=None,
     ):
@@ -34,6 +37,8 @@ class ArgsStub:
         self.max_file_kib = max_file_kib
         self.max_history_kib = max_history_kib
         self.history_object_limit = history_object_limit
+        self.diff_mode = diff_mode
+        self.pr_base_ref = pr_base_ref
         self.diff_base = diff_base
         self.diff_target = diff_target
 
@@ -66,6 +71,8 @@ def test_json_payload_fields():
         max_tracked_file_kib=2048,
         max_history_blob_kib=4096,
         history_object_limit=15000,
+        diff_mode="pr",
+        pr_base_ref="origin/main",
         diff_base="origin/main",
         diff_target="HEAD",
     )
@@ -76,6 +83,8 @@ def test_json_payload_fields():
     assert payload["max_tracked_file_kib"] == 2048
     assert payload["max_history_blob_kib"] == 4096
     assert payload["history_object_limit"] == 15000
+    assert payload["diff_mode"] == "pr"
+    assert payload["pr_base_ref"] == "origin/main"
     assert payload["diff_base"] == "origin/main"
     assert payload["diff_target"] == "HEAD"
     assert payload["exit_code"] == 2
@@ -96,6 +105,8 @@ def test_sarif_payload_shape():
         rule_pack="oss-library",
         check_ids=["readme_present", "license_present", "git_repository"],
         config_path="/tmp/repo/.repo-preflight.toml",
+        diff_mode="pr",
+        pr_base_ref="origin/main",
         diff_base="origin/main",
         diff_target="HEAD",
     )
@@ -104,7 +115,33 @@ def test_sarif_payload_shape():
     assert run["tool"]["driver"]["name"] == "repo-preflight"
     assert len(run["results"]) == 2  # pass entries omitted
     assert run["results"][0]["level"] in {"error", "warning"}
+    assert run["properties"]["diff_mode"] == "pr"
     assert run["properties"]["diff_base"] == "origin/main"
+
+
+def test_policy_doc_contains_effective_settings():
+    doc = build_policy_doc(
+        path=Path("/tmp/repo"),
+        profile="ci",
+        rule_pack="oss-library",
+        strict=True,
+        gitleaks_enabled=True,
+        diff_mode="pr",
+        pr_base_ref="origin/main",
+        diff_base="origin/main",
+        diff_target="HEAD",
+        max_tracked_file_kib=2048,
+        max_history_blob_kib=4096,
+        history_object_limit=15000,
+        check_ids=["readme_present", "gitleaks_scan"],
+        severity_overrides={"license_present": "fail"},
+        config_path="/tmp/repo/.repo-preflight.toml",
+    )
+    assert "# repo-preflight policy" in doc
+    assert "Profile: `ci`" in doc
+    assert "Diff mode: `pr`" in doc
+    assert "`readme_present`" in doc
+    assert "`license_present` -> `fail`" in doc
 
 
 def test_profile_defaults():
@@ -118,11 +155,13 @@ def test_resolve_runtime_merges_cli_over_config():
         profile="quick",
         strict=False,
         no_gitleaks=True,
+        diff_mode="manual",
+        pr_base_ref="origin/main",
+        diff_base="origin/main",
+        diff_target="HEAD",
         max_tracked_file_kib=1024,
         max_history_blob_kib=2048,
         history_object_limit=6000,
-        diff_base="origin/main",
-        diff_target="HEAD",
     )
     args = ArgsStub(
         profile="ci",
@@ -131,6 +170,8 @@ def test_resolve_runtime_merges_cli_over_config():
         max_file_kib=4096,
         max_history_kib=8192,
         history_object_limit=1000,
+        diff_mode="manual",
+        pr_base_ref="origin/develop",
         diff_base="origin/develop",
         diff_target="HEAD~1",
     )
@@ -145,6 +186,8 @@ def test_resolve_runtime_merges_cli_over_config():
         max_file_kib,
         max_history_kib,
         history_limit,
+        diff_mode,
+        pr_base_ref,
         diff_base,
         diff_target,
     ) = resolve_runtime(args, cfg)
@@ -156,15 +199,59 @@ def test_resolve_runtime_merges_cli_over_config():
     assert max_file_kib == 4096
     assert max_history_kib == 8192
     assert history_limit == 1000
+    assert diff_mode == "manual"
+    assert pr_base_ref == "origin/develop"
     assert diff_base == "origin/develop"
     assert diff_target == "HEAD~1"
+
+
+def test_resolve_runtime_pr_mode_uses_ci_env(monkeypatch):
+    cfg = PreflightConfig(diff_mode="pr")
+    args = ArgsStub(diff_mode="pr")
+
+    monkeypatch.setenv("GITHUB_BASE_REF", "main")
+    monkeypatch.setenv("GITHUB_SHA", "abc123")
+
+    (
+        _profile,
+        _rule_pack,
+        _strict,
+        _gitleaks,
+        _checks,
+        _overrides,
+        _max_file_kib,
+        _max_history_kib,
+        _history_limit,
+        diff_mode,
+        _pr_base_ref,
+        diff_base,
+        diff_target,
+    ) = resolve_runtime(args, cfg)
+
+    assert diff_mode == "pr"
+    assert diff_base == "origin/main"
+    assert diff_target == "abc123"
 
 
 def test_rule_pack_applies_when_selected():
     cfg = PreflightConfig()
     args = ArgsStub(rule_pack="oss-library")
 
-    _profile, rule_pack, strict, _gitleaks, _checks, overrides, _a, _b, _c, _d, _e = resolve_runtime(args, cfg)
+    (
+        _profile,
+        rule_pack,
+        strict,
+        _gitleaks,
+        _checks,
+        overrides,
+        _a,
+        _b,
+        _c,
+        _d,
+        _e,
+        _f,
+        _g,
+    ) = resolve_runtime(args, cfg)
     assert rule_pack == "oss-library"
     assert strict is True
     assert overrides.get("license_present") == "fail"

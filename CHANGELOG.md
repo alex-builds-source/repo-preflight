@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.6] - 2026-02-25
+### Added
+- PR/CI-aware diff mode (`--diff-mode pr`) with fallback base ref control (`--pr-base-ref`).
+- Config support for diff mode settings:
+  - `preflight.diff_mode`
+  - `preflight.pr_base_ref`
+- `policy-doc` command to render effective policy as markdown.
+
+### Changed
+- JSON and SARIF outputs now include diff mode metadata (`diff_mode`, `pr_base_ref`).
+- Expanded tests for PR diff-mode behavior and policy-doc generation.
+
 ## [0.1.5] - 2026-02-25
 ### Added
 - Diff-aware checks:

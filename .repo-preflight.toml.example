@@ -10,6 +10,12 @@ profile = "full"
 strict = false
 no_gitleaks = false
 
+# Diff behavior:
+# - manual: use explicit diff_base/diff_target when set
+# - pr: auto-resolve base/target from CI env vars with fallback
+# diff_mode = "manual"
+# pr_base_ref = "origin/main"
+
 # Optional refs for diff-aware checks
 # diff_base = "origin/main"
 diff_target = "HEAD"

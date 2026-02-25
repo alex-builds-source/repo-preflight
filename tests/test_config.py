@@ -11,6 +11,8 @@ def test_load_config_defaults_when_missing(tmp_path: Path):
     assert cfg.rule_pack is None
     assert cfg.strict is None
     assert cfg.no_gitleaks is None
+    assert cfg.diff_mode is None
+    assert cfg.pr_base_ref is None
     assert cfg.diff_base is None
     assert cfg.diff_target is None
     assert cfg.max_tracked_file_kib is None
@@ -30,6 +32,8 @@ profile = "ci"
 rule_pack = "cli-tool"
 strict = true
 no_gitleaks = false
+diff_mode = "pr"
+pr_base_ref = "origin/main"
 diff_base = "origin/main"
 diff_target = "HEAD"
 max_tracked_file_kib = 2048
@@ -52,6 +56,8 @@ license_present = "fail"
     assert cfg.rule_pack == "cli-tool"
     assert cfg.strict is True
     assert cfg.no_gitleaks is False
+    assert cfg.diff_mode == "pr"
+    assert cfg.pr_base_ref == "origin/main"
     assert cfg.diff_base == "origin/main"
     assert cfg.diff_target == "HEAD"
     assert cfg.max_tracked_file_kib == 2048
