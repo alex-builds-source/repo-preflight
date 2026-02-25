@@ -17,17 +17,44 @@ pip install -e .
 ```bash
 repo-preflight check
 repo-preflight check --path /path/to/repo
-repo-preflight check --json
+repo-preflight check --profile quick
+repo-preflight check --profile ci
 repo-preflight check --strict
+repo-preflight check --gitleaks
 repo-preflight check --no-gitleaks
+repo-preflight check --json
+repo-preflight list-checks
 ```
 
-## Modes
+## Profiles
 
-- Default mode: warnings return exit code `1`
-- Strict mode (`--strict`): warnings are treated as failures (exit code `2`)
+- `quick`: fast checks, skips `gitleaks_scan` by default
+- `full`: all checks, warnings allowed
+- `ci`: all checks, strict by default
 
-## Checks (v0.1.1)
+CLI flags can override profile defaults.
+
+## Config file (`.repo-preflight.toml`)
+
+By default, `repo-preflight` loads config from the target path.
+You can override with `--config <path>` or disable with `--no-config`.
+
+Example:
+
+```toml
+[preflight]
+profile = "ci"
+strict = true
+no_gitleaks = false
+
+[checks]
+exclude = ["clean_worktree"]
+
+[severity_overrides]
+license_present = "fail"
+```
+
+## Checks (v0.1.2)
 
 - `git_repository` (fail)
 - `remote_origin` (warn)

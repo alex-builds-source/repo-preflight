@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.2] - 2026-02-25
+### Added
+- Check profiles: `quick`, `full`, `ci`.
+- Config file support via `.repo-preflight.toml` (or `--config`).
+- Severity override system (`[severity_overrides]`).
+- `list-checks` command for discoverable check ids.
+- Example config file: `.repo-preflight.toml.example`.
+
+### Changed
+- JSON payload now includes `profile`, `config_path`, and `check_ids`.
+- Runtime resolution now merges profile defaults + config + CLI overrides.
+- Expanded test coverage for config parsing and profile behavior.
+
 ## [0.1.1] - 2026-02-25
 ### Added
 - `--strict` mode to treat warnings as failures for CI/agent gating.

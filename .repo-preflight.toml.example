@@ -1,0 +1,16 @@
+# Example repo-preflight config
+
+[preflight]
+# quick | full | ci
+profile = "full"
+strict = false
+no_gitleaks = false
+
+[checks]
+# Optional explicit adjustments to profile check list
+include = []
+exclude = []
+
+[severity_overrides]
+# Example: escalate missing LICENSE from warn -> fail
+# license_present = "fail"

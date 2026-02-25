@@ -6,6 +6,9 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 
+VALID_STATUSES = {"pass", "warn", "fail"}
+
+
 @dataclass
 class CheckResult:
     id: str
@@ -303,20 +306,80 @@ def check_gitleaks(path: Path) -> CheckResult:
     )
 
 
-def run_checks(path: Path, *, include_gitleaks: bool = True) -> list[CheckResult]:
-    results = [
-        check_git_repository(path),
-        check_remote_origin(path),
-        check_clean_worktree(path),
-        check_default_branch(path),
-        check_readme(path),
-        check_license(path),
-        check_license_spdx(path),
-        check_security(path),
-        check_gitignore_secrets(path),
-        check_tracked_env(path),
-        check_tracked_keylike_files(path),
-    ]
-    if include_gitleaks:
-        results.append(check_gitleaks(path))
+CHECK_REGISTRY = {
+    "git_repository": check_git_repository,
+    "remote_origin": check_remote_origin,
+    "clean_worktree": check_clean_worktree,
+    "default_branch_style": check_default_branch,
+    "readme_present": check_readme,
+    "license_present": check_license,
+    "license_identifier": check_license_spdx,
+    "security_policy_present": check_security,
+    "gitignore_basics": check_gitignore_secrets,
+    "tracked_env_files": check_tracked_env,
+    "tracked_keylike_files": check_tracked_keylike_files,
+    "gitleaks_scan": check_gitleaks,
+}
+
+PROFILE_CHECK_IDS = {
+    "quick": [
+        "git_repository",
+        "readme_present",
+        "license_present",
+        "security_policy_present",
+        "gitignore_basics",
+        "tracked_env_files",
+        "tracked_keylike_files",
+    ],
+    "full": list(CHECK_REGISTRY.keys()),
+    "ci": list(CHECK_REGISTRY.keys()),
+}
+
+
+def available_check_ids() -> list[str]:
+    return list(CHECK_REGISTRY.keys())
+
+
+def check_ids_for_profile(profile: str) -> list[str]:
+    if profile not in PROFILE_CHECK_IDS:
+        raise ValueError(f"Unknown profile: {profile}")
+    return list(PROFILE_CHECK_IDS[profile])
+
+
+def validate_check_ids(check_ids: list[str]) -> list[str]:
+    unknown = [check_id for check_id in check_ids if check_id not in CHECK_REGISTRY]
+    return unknown
+
+
+def _apply_status_override(result: CheckResult, override_status: str) -> CheckResult:
+    if override_status not in VALID_STATUSES or override_status == result.status:
+        return result
+
+    return CheckResult(
+        id=result.id,
+        status=override_status,
+        message=f"{result.message} (severity overridden to {override_status})",
+        fix=result.fix,
+    )
+
+
+def run_checks(
+    path: Path,
+    *,
+    check_ids: list[str],
+    severity_overrides: dict[str, str] | None = None,
+) -> list[CheckResult]:
+    unknown = validate_check_ids(check_ids)
+    if unknown:
+        unknown_s = ", ".join(unknown)
+        raise ValueError(f"Unknown check ids: {unknown_s}")
+
+    severity_overrides = severity_overrides or {}
+    results: list[CheckResult] = []
+    for check_id in check_ids:
+        result = CHECK_REGISTRY[check_id](path)
+        if check_id in severity_overrides:
+            result = _apply_status_override(result, severity_overrides[check_id])
+        results.append(result)
+
     return results

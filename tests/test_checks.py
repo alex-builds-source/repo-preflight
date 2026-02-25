@@ -3,7 +3,7 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-from repo_preflight.checks import run_checks
+from repo_preflight.checks import check_ids_for_profile, run_checks
 
 
 def _run(cmd: list[str], cwd: Path) -> None:
@@ -33,6 +33,10 @@ def _add_origin(path: Path, tmp_path: Path) -> None:
     _run(["git", "remote", "add", "origin", str(bare)], path)
 
 
+def _full_without_gitleaks() -> list[str]:
+    return [c for c in check_ids_for_profile("full") if c != "gitleaks_scan"]
+
+
 def test_happy_path_without_gitleaks(tmp_path: Path):
     repo = tmp_path / "repo"
     repo.mkdir()
@@ -45,7 +49,7 @@ def test_happy_path_without_gitleaks(tmp_path: Path):
     _write(repo, ".env.example", "X=1\n")
     _commit_all(repo)
 
-    results = run_checks(repo, include_gitleaks=False)
+    results = run_checks(repo, check_ids=_full_without_gitleaks())
     statuses = {r.id: r.status for r in results}
     assert statuses["git_repository"] == "pass"
     assert statuses["remote_origin"] == "pass"
@@ -71,7 +75,7 @@ def test_tracked_env_file_fails(tmp_path: Path):
     _run(["git", "add", "-f", ".env"], repo)
     _commit_all(repo)
 
-    results = run_checks(repo, include_gitleaks=False)
+    results = run_checks(repo, check_ids=_full_without_gitleaks())
     status_by_id = {r.id: r.status for r in results}
     assert status_by_id["tracked_env_files"] == "fail"
 
@@ -84,7 +88,7 @@ def test_missing_readme_fails(tmp_path: Path):
     _write(repo, ".gitignore", ".env\n.env.*\n!.env.example\n")
     _commit_all(repo)
 
-    results = run_checks(repo, include_gitleaks=False)
+    results = run_checks(repo, check_ids=_full_without_gitleaks())
     status_by_id = {r.id: r.status for r in results}
     assert status_by_id["readme_present"] == "fail"
 
@@ -98,7 +102,7 @@ def test_remote_origin_warns_when_missing(tmp_path: Path):
     _write(repo, ".gitignore", ".env\n.env.*\n!.env.example\n")
     _commit_all(repo)
 
-    results = run_checks(repo, include_gitleaks=False)
+    results = run_checks(repo, check_ids=_full_without_gitleaks())
     status_by_id = {r.id: r.status for r in results}
     assert status_by_id["remote_origin"] == "warn"
 
@@ -113,6 +117,6 @@ def test_unrecognized_branch_warns(tmp_path: Path):
     _commit_all(repo)
     _run(["git", "checkout", "-b", "feature/x"], repo)
 
-    results = run_checks(repo, include_gitleaks=False)
+    results = run_checks(repo, check_ids=_full_without_gitleaks())
     status_by_id = {r.id: r.status for r in results}
     assert status_by_id["default_branch_style"] == "warn"
